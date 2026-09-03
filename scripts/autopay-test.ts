@@ -135,7 +135,18 @@ async function main(): Promise<void> {
         `ref=${'order_ref' in result ? result.order_ref : '-'} ` +
         `used_paise ${fresh!.used_paise} -> ${after!.used_paise}`,
     );
-    if (result.status === 'charge_failed') console.log(`            error: ${result.error}`);
+    if (result.status === 'charge_failed') {
+      console.log(`            error: ${result.error}`);
+      if (/S2S/.test(result.error)) {
+        console.log(
+          '\n  The mandate itself is fine: the token above is registered and\n' +
+            '  confirmed with its ceiling. What is missing is permission to call\n' +
+            '  the debit endpoint from a server. Nothing in this repo can grant\n' +
+            '  that; Razorpay support enables it per account.\n',
+        );
+        break;
+      }
+    }
   }
 
   const { rows } = await pool.query(

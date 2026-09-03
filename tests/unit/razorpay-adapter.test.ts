@@ -278,6 +278,28 @@ describe('RazorpayMandateAdapter', () => {
     });
   });
 
+  it('explains an endpoint the account is not enabled for', async () => {
+    const { client } = recordingClient({
+      orders: {
+        async create() {
+          throw {
+            statusCode: 400,
+            error: {
+              code: 'BAD_REQUEST_ERROR',
+              description: 'The requested URL was not found on the server.',
+            },
+          };
+        },
+      },
+    });
+    const adapter = new RazorpayMandateAdapter({ client, db: fakeDb({ customerId: null }) });
+
+    const result = await adapter.charge(chargeReq());
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toMatch(/enable recurring \/ S2S payments/);
+  });
+
   it('rejects a non-integer or non-positive amount before anything is sent', async () => {
     const { client, orders } = recordingClient();
     const adapter = new RazorpayMandateAdapter({ client, db: fakeDb({ customerId: null }) });

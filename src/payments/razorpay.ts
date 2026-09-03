@@ -314,6 +314,20 @@ function normaliseError(err: unknown): { message: string } {
   };
   const description = e?.error?.description;
   if (description) {
+    // Razorpay answers "URL was not found" for an endpoint the account is not
+    // enabled for, which reads like a bug in the caller and is not one. The
+    // server-to-server payment APIs are the ones this hits, and they are
+    // switched on per account rather than being available by default.
+    if (/requested URL was not found/i.test(description)) {
+      return {
+        message:
+          'Razorpay rejected the server-to-server payment API as unavailable ' +
+          '(it answers "the requested URL was not found" for endpoints an ' +
+          'account is not enabled for). Mandate registration works without it; ' +
+          'debiting a registered mandate does not. Ask Razorpay support to ' +
+          'enable recurring / S2S payments on this account.',
+      };
+    }
     const code = e.error?.code ? ` (${e.error.code})` : '';
     return { message: `${description}${code}` };
   }
