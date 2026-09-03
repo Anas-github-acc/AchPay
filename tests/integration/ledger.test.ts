@@ -22,6 +22,8 @@ describe('ledger', () => {
   });
 
   afterAll(async () => {
+    // This file deliberately corrupts rows, so it must not leave them behind
+    // for the post-suite chain check to trip over.
     await resetLedger();
   });
 

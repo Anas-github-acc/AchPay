@@ -4,3 +4,18 @@ import { pool } from '../../src/db/pool.js';
 export async function resetLedger(): Promise<void> {
   await pool.query('truncate ledger restart identity');
 }
+
+/** Full reset between checkout tests: ledger, mandates and claimed keys. */
+export async function resetAll(): Promise<void> {
+  await pool.query('truncate ledger restart identity');
+  await pool.query('truncate idempotency');
+  await pool.query('truncate mandates');
+}
+
+export async function countLedger(where: string, params: unknown[] = []): Promise<number> {
+  const { rows } = await pool.query<{ n: string }>(
+    `select count(*)::text as n from ledger where ${where}`,
+    params,
+  );
+  return Number(rows[0]!.n);
+}

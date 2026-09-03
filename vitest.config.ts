@@ -12,9 +12,11 @@ export default defineConfig({
     // the Postgres pool and Redis connection warm across the suite.
     pool: 'threads',
     isolate: false,
-    fileParallelism: true,
-    // Integration files that share the ledger table run one at a time; unit
-    // files have no shared state. See tests/integration/*.test.ts.
+    // Integration files share one Postgres database and truncate the ledger
+    // between cases, so files run one at a time. The suite is small enough
+    // that this costs a fraction of a second and removes a whole class of
+    // cross-file flake.
+    fileParallelism: false,
     sequence: { concurrent: false },
     testTimeout: 15_000,
     hookTimeout: 20_000,
