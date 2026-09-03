@@ -102,7 +102,11 @@ describe('RazorpayMandateAdapter', () => {
     expect(result).toMatchObject({ ref: 'order_TEST1', status: 'created' });
 
     expect(customers).toHaveLength(1);
+    // A contact is required: Razorpay rejects recurring orders without one, and
+    // a customer with no phone cannot be debited automatically later.
     expect(customers[0]).toMatchObject({ name: 'user_test', fail_existing: 0 });
+    expect(customers[0]!.contact).toBeTruthy();
+    expect(customers[0]!.email).toBeTruthy();
 
     expect(orders).toHaveLength(1);
     const order = orders[0] as MandateOrderCreateBody;

@@ -276,14 +276,24 @@ function tokenExpiry(mandate: MandateRecord): number {
  * Customer details from a user_ref alone.
  *
  * The storefront holds no name, email or phone for a user_ref, so a stable
- * placeholder is synthesised on a reserved domain. Real deployments pass
- * `customerFor` and send the details they actually hold.
+ * placeholder is synthesised. A contact is not optional here: Razorpay rejects
+ * a recurring order without one ("The contact field is required for recurring
+ * links"), and `payments.createRecurringPayment` requires email and contact
+ * both, so a customer created without a phone cannot be debited automatically
+ * later. Real deployments pass `customerFor` and send what they actually hold.
  */
-function defaultCustomerFor(mandate: MandateRecord): { name: string; email: string } {
+function defaultCustomerFor(mandate: MandateRecord): {
+  name: string;
+  email: string;
+  contact: string;
+} {
   const slug = mandate.user_ref.replace(/[^a-zA-Z0-9]+/g, '.').replace(/^\.|\.$/g, '');
   return {
     name: mandate.user_ref.slice(0, 50),
     email: `${slug || 'user'}@example.com`,
+    // Razorpay's documented test contact. Deterministic, and never a real
+    // person's number.
+    contact: '9123456780',
   };
 }
 

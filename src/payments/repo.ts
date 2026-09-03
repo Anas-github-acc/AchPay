@@ -63,12 +63,20 @@ export async function getPayment(
 }
 
 /**
- * Moves a pending payment to its terminal status.
+ * Moves a payment towards its terminal status.
  *
- * Only ever fires on a row still sitting at `created`, so a late or duplicate
- * delivery cannot flip a settled payment, and a `payment.captured` arriving
- * after a `payment.failed` for the same order does not quietly rewrite history.
- * Returns undefined when nothing moved, which the caller reports rather than
+ * Only a capture is terminal. A failed attempt is not: Razorpay lets a customer
+ * retry on the same order, so `payment.failed` followed by `payment.captured`
+ * is an ordinary sequence, not a contradiction. Treating failure as final left
+ * a payment reading `failed` while the money had actually moved.
+ *
+ *   created -> captured    yes
+ *   created -> failed      yes, provisionally
+ *   failed  -> captured    yes, a retry succeeded
+ *   captured -> failed     no, money has moved
+ *   captured -> captured   no, already settled
+ *
+ * Returns undefined when nothing moved, which the caller records rather than
  * treating as success.
  */
 export async function settlePayment(
@@ -77,13 +85,17 @@ export async function settlePayment(
   paymentRef: string | null,
   db: Db = pool,
 ): Promise<PaymentRecord | undefined> {
+  // A capture supersedes a previous failure; a failure never supersedes a
+  // capture. Expressed in the where clause so it holds under concurrent
+  // deliveries rather than depending on the order they arrive in.
+  const allowedFrom = status === 'captured' ? ['created', 'failed'] : ['created'];
   const { rows } = await db.query<RawPayment>(
     `update payments
         set status = $2, payment_ref = coalesce($3, payment_ref), updated_at = now()
       where order_ref = $1
-        and status = 'created'
+        and status = any($4)
       returning *`,
-    [orderRef, status, paymentRef],
+    [orderRef, status, paymentRef, allowedFrom],
   );
   return rows[0] ? toPayment(rows[0]) : undefined;
 }

@@ -219,17 +219,52 @@ describe('POST /webhooks/razorpay', () => {
     expect(await verifyChain()).toMatchObject({ ok: true });
   });
 
-  it('does not let a late captured overwrite a settled failure', async () => {
+  it('lets a retry succeed: failed then captured settles as captured', async () => {
+    // Exactly what a real card retry produced: the first attempt failed, the
+    // customer tried again on the same order and it captured. A failed attempt
+    // is not terminal for an order, so the capture has to win.
     const { orderRef } = await chargeOnce();
 
     await deliver(event('payment.failed', orderRef), { eventId: 'evt_a' });
-    const late = await deliver(event('payment.captured', orderRef), { eventId: 'evt_b' });
+    expect((await getPayment(orderRef))!.status).toBe('failed');
+
+    const retry = await deliver(event('payment.captured', orderRef, 4_000, 'pay_RETRY'), {
+      eventId: 'evt_b',
+    });
+
+    expect(retry.statusCode).toBe(200);
+    expect(retry.json()).toMatchObject({ status: 'processed', payment_status: 'captured' });
+    const payment = await getPayment(orderRef);
+    expect(payment!.status).toBe('captured');
+    expect(payment!.payment_ref).toBe('pay_RETRY');
+    expect(await countLedger("event_type = 'webhook'")).toBe(2);
+  });
+
+  it('never lets a failure overwrite a capture', async () => {
+    const { orderRef } = await chargeOnce();
+
+    await deliver(event('payment.captured', orderRef), { eventId: 'evt_c' });
+    const late = await deliver(event('payment.failed', orderRef), { eventId: 'evt_d' });
 
     expect(late.statusCode).toBe(200);
-    expect((await getPayment(orderRef))!.status).toBe('failed');
-    // Both deliveries are recorded; only the first changed anything.
-    expect(await countLedger("event_type = 'webhook'")).toBe(2);
+    // Money has moved. A later failure is recorded but never applied.
+    expect((await getPayment(orderRef))!.status).toBe('captured');
     expect(await countLedger("event_type = 'webhook' and payload ->> 'applied' = 'false'")).toBe(1);
+  });
+
+  it('does not apply a second capture for an already captured payment', async () => {
+    const { orderRef } = await chargeOnce();
+
+    await deliver(event('payment.captured', orderRef), { eventId: 'evt_e' });
+    const again = await deliver(event('payment.captured', orderRef, 4_000, 'pay_OTHER'), {
+      eventId: 'evt_f',
+    });
+
+    expect(again.statusCode).toBe(200);
+    const payment = await getPayment(orderRef);
+    expect(payment!.status).toBe('captured');
+    // The first capture's payment_ref stands.
+    expect(payment!.payment_ref).toBe('pay_TEST0001');
   });
 
   it('records an event for an unknown order without failing the delivery', async () => {
