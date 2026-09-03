@@ -21,7 +21,11 @@ export type CheckoutResult =
       amount_paise: number;
       rule_id: RuleId;
       order_ref: string;
-      charge_status: 'created' | 'captured';
+      /**
+       * Always 'created'. A charge is pending until a webhook settles it;
+       * query GET /payments/:order_ref for the reconciled status.
+       */
+      charge_status: 'created';
       ledger_seq: number;
     })
   | (Base & { status: 'denied'; rule_id: RuleId; reason: string; ledger_seq: number })

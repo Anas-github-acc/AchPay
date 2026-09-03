@@ -62,6 +62,8 @@ export const config = {
     // is actually selected, and the adapter says so itself if they are not.
     keyId: process.env.RAZORPAY_KEY_ID,
     keySecret: process.env.RAZORPAY_KEY_SECRET,
+    /** Signs webhook bodies. Without it the webhook route refuses to run. */
+    webhookSecret: process.env.RAZORPAY_WEBHOOK_SECRET,
     frequency: mandateFrequency(),
     /**
      * Sends token.type = 'single_block_multiple_debit' on mandate orders.

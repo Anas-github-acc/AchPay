@@ -10,6 +10,8 @@ export async function resetAll(): Promise<void> {
   await pool.query('truncate ledger restart identity');
   await pool.query('truncate idempotency');
   await pool.query('truncate mandates');
+  await pool.query('truncate payments');
+  await pool.query('truncate webhook_events');
 }
 
 export async function countLedger(where: string, params: unknown[] = []): Promise<number> {

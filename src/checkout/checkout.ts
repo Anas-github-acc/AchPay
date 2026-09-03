@@ -2,6 +2,7 @@ import type pg from 'pg';
 import { withTransaction } from '../db/pool.js';
 import { pool } from '../db/pool.js';
 import { append } from '../ledger/ledger.js';
+import { recordCharge } from '../payments/repo.js';
 import { chargeHistory, getMandateForUpdate, incrementUsed } from '../mandates/repo.js';
 import type { MandateRecord } from '../mandates/types.js';
 import { evaluate } from '../policy/evaluate.js';
@@ -222,6 +223,23 @@ async function runCharge(tx: pg.PoolClient, ctx: ChargeContext): Promise<Checkou
     );
   }
 
+  // The payment is booked as pending, whatever the adapter's response said.
+  //
+  // An API response is the rail acknowledging the request; it is not the money
+  // having moved. Recording 'captured' here would mean the ledger's payment
+  // status came from what Razorpay said rather than from what happened, and
+  // those are not the same thing. Only a webhook moves it past 'created'.
+  await recordCharge(
+    {
+      order_ref: charged.ref,
+      mandate_id: mandateId,
+      quote_id: quote.quote_id,
+      amount_paise: total,
+      adapter: adapter.name,
+    },
+    tx,
+  );
+
   const chargeRow = await append(
     {
       actor: 'system',
@@ -231,7 +249,10 @@ async function runCharge(tx: pg.PoolClient, ctx: ChargeContext): Promise<Checkou
       razorpay_ref: charged.ref,
       payload: {
         mandate_id: mandateId,
-        status: charged.status,
+        status: 'created',
+        // What the rail answered synchronously, kept for reconciliation but
+        // never treated as the payment's status.
+        provider_status: charged.status,
         adapter: adapter.name,
         idempotency_key: key,
       },
@@ -246,7 +267,7 @@ async function runCharge(tx: pg.PoolClient, ctx: ChargeContext): Promise<Checkou
     amount_paise: total,
     rule_id: decision.rule_id,
     order_ref: charged.ref,
-    charge_status: charged.status,
+    charge_status: 'created',
     ledger_seq: chargeRow.seq,
   };
 

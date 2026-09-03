@@ -9,10 +9,12 @@ import { redis } from '../redis.js';
 import { pool } from '../db/pool.js';
 import { readAll, verifyChain } from '../ledger/ledger.js';
 import { checkout } from '../checkout/checkout.js';
+import { webhookRoutes } from './webhook-route.js';
 import { createMandate, getMandate, revokeMandate } from '../mandates/repo.js';
 import { createAdapter } from '../payments/index.js';
 import type { PaymentAdapter } from '../payments/types.js';
 import { getPolicy } from '../policy/config.js';
+import { getPayment } from '../payments/repo.js';
 import type { CheckoutRequest } from '../checkout/types.js';
 import type { QuoteRequestItem } from '../quotes/types.js';
 
@@ -178,6 +180,15 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     // Only an unusable quote gets a 4xx.
     if (result.status === 'quote_invalid') return reply.code(409).send(result);
     return result;
+  });
+
+  await webhookRoutes(app);
+
+  app.get('/payments/:order_ref', async (request, reply) => {
+    const { order_ref } = request.params as { order_ref: string };
+    const payment = await getPayment(order_ref);
+    if (!payment) return reply.code(404).send({ error: 'PAYMENT_NOT_FOUND', order_ref });
+    return payment;
   });
 
   app.get('/ledger', async (request) => {

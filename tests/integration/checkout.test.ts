@@ -72,7 +72,9 @@ describe('checkout', () => {
       status: 'charged',
       amount_paise: 4_000,
       rule_id: 'all_checks_passed',
-      charge_status: 'captured',
+      // A charge is booked pending, never captured. The rail's synchronous
+      // answer is not the money moving; only a webhook settles a payment.
+      charge_status: 'created',
     });
     expect(adapter.calls).toBe(1);
 
