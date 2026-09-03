@@ -1,6 +1,6 @@
 import type { Db } from '../db/pool.js';
 import { pool } from '../db/pool.js';
-import { findProviderCustomerId, setProviderCustomerId } from '../mandates/repo.js';
+import { findCustomerId, rememberCustomerId } from '../mandates/provider-customers.js';
 import type { MandateRecord } from '../mandates/types.js';
 import { ProviderError } from './errors.js';
 import type {
@@ -139,19 +139,17 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
   /**
    * One customer per user_ref.
    *
-   * Looked up from any mandate that user already holds, so a second mandate
-   * for the same person reuses the first one's `cust_` id. `fail_existing: 0`
-   * makes the create idempotent at Razorpay's end too, for the case where our
-   * row was lost but their customer was not.
+   * The lookup and the write both go to `provider_customers`, never to the
+   * mandate row. The checkout transaction that called us is holding that row
+   * under `for update` and cannot commit until this returns, so touching it
+   * here would deadlock the two against each other.
    */
   private async ensureCustomer(mandate: MandateRecord): Promise<string> {
+    // Set at mandate creation for a user whose customer is already known.
     if (mandate.provider_customer_id) return mandate.provider_customer_id;
 
-    const existing = await findProviderCustomerId(mandate.user_ref, this.db);
-    if (existing) {
-      await setProviderCustomerId(mandate.id, existing, this.db);
-      return existing;
-    }
+    const existing = await findCustomerId(this.name, mandate.user_ref, this.db);
+    if (existing) return existing;
 
     const details = this.customerFor(mandate);
     const customer = await this.client.customers.create({
@@ -161,10 +159,8 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
     });
     if (!customer?.id) throw new ProviderError('Razorpay returned a customer with no id');
 
-    // Only writes if the column is still null, so two racing charges settle on
-    // whichever landed first rather than clobbering each other.
-    const saved = await setProviderCustomerId(mandate.id, customer.id, this.db);
-    return saved?.provider_customer_id ?? customer.id;
+    // Returns whichever id won the race, so every later charge agrees.
+    return rememberCustomerId(this.name, mandate.user_ref, customer.id, this.db);
   }
 
   /**

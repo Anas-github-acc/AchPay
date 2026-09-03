@@ -86,52 +86,6 @@ export async function incrementUsed(
   return rows[0] ? toMandate(rows[0]) : undefined;
 }
 
-/**
- * Records the provider's customer id on a mandate.
- *
- * Written once, and only when it is still null, so two concurrent charges that
- * both raced to create a customer cannot overwrite each other. The loser's id
- * is simply unused; the winner's is what every later charge reuses.
- */
-export async function setProviderCustomerId(
-  id: string,
-  customerId: string,
-  db: Db = pool,
-): Promise<MandateRecord | undefined> {
-  const { rows } = await db.query<RawMandate>(
-    `update mandates
-        set provider_customer_id = $2
-      where id = $1
-        and provider_customer_id is null
-      returning *`,
-    [id, customerId],
-  );
-  return rows[0] ? toMandate(rows[0]) : undefined;
-}
-
-/**
- * The customer id already created for this user, from any of their mandates.
- *
- * "Create a customer once per user" is enforced here rather than by a separate
- * customers table: the first mandate that needs one creates it, every later
- * one finds it.
- */
-export async function findProviderCustomerId(
-  userRef: string,
-  db: Db = pool,
-): Promise<string | undefined> {
-  const { rows } = await db.query<{ provider_customer_id: string }>(
-    `select provider_customer_id
-       from mandates
-      where user_ref = $1
-        and provider_customer_id is not null
-      order by created_at
-      limit 1`,
-    [userRef],
-  );
-  return rows[0]?.provider_customer_id;
-}
-
 /** Records the registered mandate token once authorisation has completed. */
 export async function setProviderToken(
   id: string,

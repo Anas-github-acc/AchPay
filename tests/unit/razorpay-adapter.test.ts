@@ -50,16 +50,16 @@ function recordingClient(overrides: Partial<RazorpayClient> = {}) {
   return { client, customers, orders, recurring };
 }
 
-/** An in-memory stand-in for the two mandate columns the adapter touches. */
+/** An in-memory stand-in for the provider_customers table. */
 function fakeDb(state: { customerId: string | null }) {
   return {
     async query(sql: string, params: unknown[]) {
-      if (sql.includes('select provider_customer_id')) {
-        return { rows: state.customerId ? [{ provider_customer_id: state.customerId }] : [] };
+      if (sql.includes('select customer_id from provider_customers')) {
+        return { rows: state.customerId ? [{ customer_id: state.customerId }] : [] };
       }
-      if (sql.includes('set provider_customer_id')) {
-        if (state.customerId === null) state.customerId = params[1] as string;
-        return { rows: [{ ...mandate(), provider_customer_id: state.customerId }] };
+      if (sql.includes('insert into provider_customers')) {
+        if (state.customerId === null) state.customerId = params[2] as string;
+        return { rows: [{ customer_id: state.customerId }] };
       }
       throw new Error(`unexpected query: ${sql}`);
     },
@@ -133,6 +133,24 @@ describe('RazorpayMandateAdapter', () => {
       singleBlockMultipleDebit: true,
     }).charge(chargeReq());
     expect((on.orders[0] as MandateOrderCreateBody).token.type).toBe('single_block_multiple_debit');
+  });
+
+  it('never writes to the mandate row, which its caller holds locked', async () => {
+    const { client } = recordingClient();
+    const seen: string[] = [];
+    const db = {
+      async query(sql: string, params: unknown[]) {
+        seen.push(sql);
+        if (sql.includes('select customer_id')) return { rows: [] };
+        return { rows: [{ customer_id: params[2] }] };
+      },
+    } as never;
+
+    await new RazorpayMandateAdapter({ client, db }).charge(chargeReq());
+
+    expect(seen.length).toBeGreaterThan(0);
+    // Touching `mandates` here deadlocks against checkout's `for update` lock.
+    for (const sql of seen) expect(sql).not.toMatch(/\bmandates\b/);
   });
 
   it('reuses an existing customer instead of creating a second one', async () => {
