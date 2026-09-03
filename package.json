@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:adversarial": "vitest run tests/adversarial",
     "verify:ledger": "tsx scripts/verify-ledger.ts",
-    "smoke:razorpay": "tsx scripts/razorpay-smoke.ts"
+    "smoke:razorpay": "tsx scripts/razorpay-smoke.ts",
+    "test:webhook-live": "tsx scripts/webhook-live-test.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
