@@ -1,6 +1,12 @@
 export interface QuoteLine {
   sku: string;
   title: string;
+  /**
+   * Catalog category, carried on the quote so the policy engine can apply the
+   * denylist without a catalog lookup. It is signed along with everything
+   * else, so it cannot be swapped in transit.
+   */
+  category: string;
   qty: number;
   /** Integer paise, copied from the catalog at signing time. */
   unit_price_paise: number;

@@ -1,0 +1,26 @@
+# Spending policy. Every value is read by the policy engine as a structured
+# number, string or list — the engine never reads free text from anywhere.
+#
+# Boundary convention: every *_max is inclusive (a transaction exactly at the
+# cap is allowed), and gate_above_paise is exclusive (exactly at the threshold
+# is allowed, one paisa over gates). See src/policy/evaluate.ts.
+
+# Largest single transaction, in paise. 50000 paise = Rs 500.
+per_txn_max_paise: 50000
+
+# Total allowed across a rolling 24 hours, in paise. 200000 paise = Rs 2000.
+daily_max_paise: 200000
+
+# Most transactions permitted in any rolling 60 minutes.
+velocity_max_per_hour: 5
+
+# Anything strictly above this needs human approval. 30000 paise = Rs 300.
+gate_above_paise: 30000
+
+# Categories that can never be bought by an agent, at any amount.
+category_denylist:
+  - alcohol
+  - tobacco
+
+# When true, a quote larger than the mandate's remaining headroom is denied.
+require_mandate_headroom: true

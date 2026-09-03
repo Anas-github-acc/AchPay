@@ -60,6 +60,7 @@ export class QuoteService {
       lines.push({
         sku: product.sku,
         title: product.title,
+        category: product.category,
         qty,
         unit_price_paise: product.price_paise,
         line_total_paise: product.price_paise * qty,
@@ -180,6 +181,7 @@ function checkShape(candidate: unknown): string | undefined {
   if (!Number.isSafeInteger(q.total_paise)) return 'total_paise must be an integer';
   for (const line of q.lines) {
     if (typeof line?.sku !== 'string') return 'each line needs a sku';
+    if (typeof line.category !== 'string') return `each line needs a category (${line.sku})`;
     if (!Number.isSafeInteger(line.qty) || line.qty <= 0) return `bad qty on ${line?.sku}`;
     if (!Number.isSafeInteger(line.unit_price_paise)) return `bad unit price on ${line.sku}`;
     if (!Number.isSafeInteger(line.line_total_paise)) return `bad line total on ${line.sku}`;
