@@ -10,7 +10,7 @@ import { pool } from '../db/pool.js';
 import { readAll, verifyChain } from '../ledger/ledger.js';
 import { checkout } from '../checkout/checkout.js';
 import { createMandate, getMandate, revokeMandate } from '../mandates/repo.js';
-import { FakeAdapter } from '../payments/fake.js';
+import { createAdapter } from '../payments/index.js';
 import type { PaymentAdapter } from '../payments/types.js';
 import { getPolicy } from '../policy/config.js';
 import type { CheckoutRequest } from '../checkout/types.js';
@@ -18,7 +18,11 @@ import type { QuoteRequestItem } from '../quotes/types.js';
 
 export interface BuildAppOptions {
   logger?: boolean;
-  /** Swapped wholesale in Phase 5. Nothing above this line changes. */
+  /**
+   * Overrides the configured rail. Tests that need a specific adapter pass one
+   * here; everything else takes whatever PAYMENT_ADAPTER selects, so switching
+   * to real money is configuration rather than a code change.
+   */
   adapter?: PaymentAdapter;
 }
 
@@ -32,7 +36,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     ttlSeconds: config.quoteTtlSeconds,
   });
   const quoteStore = new QuoteStore(redis, config.quoteTtlSeconds);
-  const adapter = opts.adapter ?? new FakeAdapter();
+  const adapter = opts.adapter ?? (await createAdapter());
 
   app.decorate('quotes', quotes);
   app.decorate('quoteStore', quoteStore);

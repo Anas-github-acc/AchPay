@@ -14,13 +14,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:adversarial": "vitest run tests/adversarial",
-    "verify:ledger": "tsx scripts/verify-ledger.ts"
+    "verify:ledger": "tsx scripts/verify-ledger.ts",
+    "smoke:razorpay": "tsx scripts/razorpay-smoke.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
     "fastify": "^5.6.1",
     "ioredis": "^5.9.0",
     "pg": "^8.16.3",
+    "razorpay": "^2.9.8",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
