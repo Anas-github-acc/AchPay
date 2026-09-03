@@ -21,17 +21,27 @@ const DAY_MS = 24 * HOUR_MS;
  * Rules run in a fixed order and the first non-allow verdict wins, so a deny
  * always beats a gate:
  *
- *   1. category_denylist   deny  — forbidden goods, at any amount
- *   2. mandate validity    deny  — missing, revoked, or expired
- *   3. headroom            deny  — exceeds what is left on the mandate
- *   4. per_txn_max         deny  — single transaction too large
- *   5. daily_max           deny  — would breach the rolling 24h total
- *   6. velocity            deny  — too many transactions in the last hour
- *   7. gate_threshold      gate  — large enough to need a human
- *   8. all_checks_passed   allow
+ *    1. category_denylist            deny  — forbidden goods, at any amount
+ *    2. max_qty_per_sku              deny  — too many units of one sku
+ *    3. max_line_items               deny  — too many distinct skus
+ *    4. mandate validity             deny  — missing, revoked, or expired
+ *    5. headroom                     deny  — exceeds what is left on the mandate
+ *    6. per_txn_max                  deny  — single transaction too large
+ *    7. daily_max                    deny  — would breach the rolling 24h total
+ *    8. velocity                     deny  — too many transactions in the hour
+ *    9. category_median_multiple     gate  — priced far above its category
+ *   10. gate_threshold               gate  — large enough to need a human
+ *   11. all_checks_passed            allow
+ *
+ * Rules 2, 3 and 9 bound *choice* rather than spend. The amount rules already
+ * make an injected description unable to change how much is spent; these make it
+ * unable to quietly change what is bought inside that envelope — ten of one
+ * thing, or the priciest item in its aisle — which is the part of the attack
+ * surface a pure amount cap does not cover.
  *
  * Boundaries: every *_max is inclusive (exactly at the cap is allowed);
- * gate_above_paise is exclusive (exactly at the threshold is allowed).
+ * gate_above_paise is exclusive (exactly at the threshold is allowed), and so is
+ * the median multiple (exactly 2x the median is allowed, a paisa more gates).
  */
 export function evaluate(input: PolicyInput): PolicyDecision {
   const policy: PolicyConfig = input.policy ?? getPolicy();
@@ -54,7 +64,30 @@ export function evaluate(input: PolicyInput): PolicyDecision {
     }
   }
 
-  // 2. Mandate validity. Without a live mandate there is no authority to spend.
+  // 2. Quantity per sku. Bounds one axis of choice an injected description
+  //    could otherwise push on: buy the same thing over and over.
+  for (const line of quote.lines) {
+    if (line.qty > policy.max_qty_per_sku) {
+      return {
+        decision: 'deny',
+        rule_id: 'max_qty_per_sku',
+        reason: `${line.qty} units of ${line.sku} exceeds the limit of ${policy.max_qty_per_sku} per sku`,
+        observed: { sku: line.sku, qty: line.qty, max_qty_per_sku: policy.max_qty_per_sku },
+      };
+    }
+  }
+
+  // 3. Basket width. Bounds the other axis: pad the order with extra skus.
+  if (quote.lines.length > policy.max_line_items) {
+    return {
+      decision: 'deny',
+      rule_id: 'max_line_items',
+      reason: `${quote.lines.length} line items exceeds the limit of ${policy.max_line_items}`,
+      observed: { line_items: quote.lines.length, max_line_items: policy.max_line_items },
+    };
+  }
+
+  // 4. Mandate validity. Without a live mandate there is no authority to spend.
   if (!mandate) {
     return {
       decision: 'deny',
@@ -89,7 +122,7 @@ export function evaluate(input: PolicyInput): PolicyDecision {
     };
   }
 
-  // 3. Headroom: what is left on the mandate itself.
+  // 5. Headroom: what is left on the mandate itself.
   if (policy.require_mandate_headroom) {
     const headroom = mandate.max_amount_paise - mandate.used_paise;
     if (total > headroom) {
@@ -102,7 +135,7 @@ export function evaluate(input: PolicyInput): PolicyDecision {
     }
   }
 
-  // 4. Per-transaction cap. Inclusive: exactly at the cap is allowed.
+  // 6. Per-transaction cap. Inclusive: exactly at the cap is allowed.
   if (total > policy.per_txn_max_paise) {
     return {
       decision: 'deny',
@@ -112,7 +145,7 @@ export function evaluate(input: PolicyInput): PolicyDecision {
     };
   }
 
-  // 5. Rolling 24-hour total. A rolling window rather than a calendar day, so
+  // 7. Rolling 24-hour total. A rolling window rather than a calendar day, so
   //    the cap cannot be doubled by straddling midnight. This is the rule that
   //    stops a large purchase being split into small ones.
   const spentToday = sumSince(history, now.getTime() - DAY_MS, now);
@@ -129,7 +162,7 @@ export function evaluate(input: PolicyInput): PolicyDecision {
     };
   }
 
-  // 6. Velocity: transaction count, not amount, in the last rolling hour.
+  // 8. Velocity: transaction count, not amount, in the last rolling hour.
   const lastHour = countSince(history, now.getTime() - HOUR_MS, now);
   if (lastHour >= policy.velocity_max_per_hour) {
     return {
@@ -143,7 +176,37 @@ export function evaluate(input: PolicyInput): PolicyDecision {
     };
   }
 
-  // 7. Gate threshold. Exclusive: exactly at the threshold is allowed.
+  // 9. Priced far above its category. The median arrives on the quote, signed,
+  //    so this stays a comparison between two numbers the engine was handed.
+  //
+  //    The multiple is a ratio and may be fractional, so it is scaled to an
+  //    integer per-mille factor and cross-multiplied. No paise amount is ever
+  //    divided, and no float is ever multiplied by money.
+  const multiplePerMille = Math.round(policy.gate_if_price_above_category_median_multiple * 1000);
+  for (const line of quote.lines) {
+    const median = line.category_median_paise;
+    // A median of zero means the quote could not establish one (an empty or
+    // unknown category). The rule cannot say anything useful, so it says
+    // nothing; the amount caps above still apply. The value is inside the
+    // quote signature, so a caller cannot zero it out to reach this branch.
+    if (!Number.isSafeInteger(median) || median <= 0) continue;
+    if (line.unit_price_paise * 1000 > median * multiplePerMille) {
+      return {
+        decision: 'gate',
+        rule_id: 'category_median_multiple',
+        reason: `${line.sku} at ${line.unit_price_paise} paise is more than ${policy.gate_if_price_above_category_median_multiple}x the ${median} paise median for ${line.category}`,
+        observed: {
+          sku: line.sku,
+          category: line.category,
+          unit_price_paise: line.unit_price_paise,
+          category_median_paise: median,
+          multiple: policy.gate_if_price_above_category_median_multiple,
+        },
+      };
+    }
+  }
+
+  // 10. Gate threshold. Exclusive: exactly at the threshold is allowed.
   //    Last, so anything that would be denied is denied rather than queued for
   //    a human who might wave it through.
   if (total > policy.gate_above_paise) {

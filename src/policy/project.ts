@@ -14,7 +14,9 @@ export function toPolicyQuote(quote: SignedQuote): PolicyQuote {
       sku: line.sku,
       category: line.category,
       qty: line.qty,
+      unit_price_paise: line.unit_price_paise,
       line_total_paise: line.line_total_paise,
+      category_median_paise: line.category_median_paise,
     })),
   };
 }

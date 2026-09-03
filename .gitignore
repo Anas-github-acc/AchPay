@@ -3,3 +3,4 @@ dist/
 .env
 *.log
 .pnpm-store/
+data/ingest-report.json

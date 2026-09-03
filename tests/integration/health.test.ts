@@ -19,7 +19,9 @@ describe('GET /health', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       status: 'ok',
-      catalog_items: 35,
+      catalog_items: 37,
+      catalog_flagged: 1,
+      catalog_quarantined: 1,
       postgres: 'up',
       redis: 'up',
     });

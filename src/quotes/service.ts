@@ -3,6 +3,7 @@ import type { Catalog } from '../catalog/catalog.js';
 import { UnknownSkuError } from '../catalog/catalog.js';
 import { signQuote, verifySignature } from './sign.js';
 import type {
+  MedianDrift,
   QuoteLine,
   QuoteRequestItem,
   SignedQuote,
@@ -64,6 +65,7 @@ export class QuoteService {
         qty,
         unit_price_paise: product.price_paise,
         line_total_paise: product.price_paise * qty,
+        category_median_paise: this.catalog.categoryMedianPaise(product.category),
       });
     }
     lines.sort((a, b) => a.sku.localeCompare(b.sku));
@@ -113,6 +115,7 @@ export class QuoteService {
     }
 
     const deltas: StaleLineDelta[] = [];
+    const medianDrift: MedianDrift[] = [];
     for (const line of quote.lines) {
       const product = this.catalog.get(line.sku);
       if (!product) {
@@ -126,6 +129,14 @@ export class QuoteService {
         });
         continue;
       }
+      const currentMedian = this.catalog.categoryMedianPaise(product.category);
+      if (currentMedian !== line.category_median_paise) {
+        medianDrift.push({
+          sku: line.sku,
+          quoted_median_paise: line.category_median_paise,
+          current_median_paise: currentMedian,
+        });
+      }
       if (product.price_paise !== line.unit_price_paise) {
         deltas.push({
           sku: line.sku,
@@ -136,7 +147,7 @@ export class QuoteService {
       }
     }
 
-    if (deltas.length > 0) {
+    if (deltas.length > 0 || medianDrift.length > 0) {
       const totalDelta = deltas.reduce((sum, d) => sum + d.delta_paise * qtyForSku(quote, d.sku), 0);
       return {
         ok: false,
@@ -144,6 +155,7 @@ export class QuoteService {
         reason: 'Catalog prices changed since this quote was issued',
         deltas,
         total_delta_paise: totalDelta,
+        ...(medianDrift.length > 0 ? { median_drift: medianDrift } : {}),
       };
     }
 
@@ -185,6 +197,9 @@ function checkShape(candidate: unknown): string | undefined {
     if (!Number.isSafeInteger(line.qty) || line.qty <= 0) return `bad qty on ${line?.sku}`;
     if (!Number.isSafeInteger(line.unit_price_paise)) return `bad unit price on ${line.sku}`;
     if (!Number.isSafeInteger(line.line_total_paise)) return `bad line total on ${line.sku}`;
+    if (!Number.isSafeInteger(line.category_median_paise) || line.category_median_paise < 0) {
+      return `bad category median on ${line.sku}`;
+    }
   }
   return undefined;
 }

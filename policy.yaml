@@ -24,3 +24,19 @@ category_denylist:
 
 # When true, a quote larger than the mandate's remaining headroom is denied.
 require_mandate_headroom: true
+
+# --- choice bounding ---------------------------------------------------------
+# The rules above bound how much an agent may spend. These bound *what* it may
+# choose inside that envelope, which is the part an injected product description
+# can still reach: quantity, which sku, and quietly skipping cheaper options.
+
+# Most units of a single sku in one transaction.
+max_qty_per_sku: 3
+
+# Most distinct skus in one transaction.
+max_line_items: 10
+
+# A unit price above this multiple of its category median goes to a human.
+# It gates rather than denies: an expensive item is a legitimate purchase that
+# deserves a look, not a blocked one.
+gate_if_price_above_category_median_multiple: 2.0

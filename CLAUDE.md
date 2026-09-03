@@ -12,7 +12,8 @@ Build plan: see build-plan.md. Work one phase at a time.
 - The ledger is insert-only. Never write UPDATE or DELETE against it.
 - Charges are idempotent, enforced by a unique constraint inside the charge
   transaction.
-- Commit changes when need helps me to keep track of changes you did.
+- Commit changes when needed, help me to keep track of changes you did.
+- commit should be short and pin-point.
 - Never commit .env or any secret.
 
 ## Working style

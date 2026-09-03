@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { getCatalog } from '../catalog/catalog.js';
 import { UnknownSkuError } from '../catalog/catalog.js';
+import { toDetailView, toListView } from '../catalog/views.js';
 import { QuoteService, InvalidQuoteRequestError } from '../quotes/service.js';
 import { QuoteStore } from '../quotes/store.js';
 import { redis } from '../redis.js';
@@ -45,11 +46,23 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     return {
       status: 'ok',
       catalog_items: catalog.size,
+      catalog_flagged: catalog.report.items_flagged,
+      catalog_quarantined: catalog.report.items_quarantined,
       postgres: db.status === 'fulfilled' ? 'up' : 'down',
       redis: cache.status === 'fulfilled' ? 'up' : 'down',
     };
   });
 
+  // The read path is split in two on purpose.
+  //
+  // GET /products carries no description field at all, for any item, flagged or
+  // not. It is the route an agent actually calls, so keeping untrusted prose out
+  // of it removes most of the injection surface for free — no filtering, no
+  // per-item decision, nothing to forget.
+  //
+  // GET /products/:sku/details is the only route that can return a description,
+  // and only for an item that is both verified and unflagged. Most flows never
+  // call it.
   app.get('/products', async (request) => {
     const q = request.query as Record<string, string | undefined>;
     const maxPrice = q.max_price_paise === undefined ? undefined : Number(q.max_price_paise);
@@ -62,7 +75,16 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       max_price_paise: maxPrice,
       limit: q.limit === undefined ? undefined : Number(q.limit),
     });
-    return { items, count: items.length };
+    return { items: items.map(toListView), count: items.length };
+  });
+
+  app.get('/products/:sku/details', async (request, reply) => {
+    const { sku } = request.params as { sku: string };
+    const product = catalog.get(sku);
+    if (!product) {
+      return reply.code(404).send({ error: 'UNKNOWN_SKU', reason: `Unknown sku: ${sku}`, sku });
+    }
+    return toDetailView(product);
   });
 
   app.post('/quotes', async (request, reply) => {

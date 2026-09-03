@@ -20,6 +20,12 @@ export function loadPolicy(path: string = defaultPolicyPath): PolicyConfig {
     velocity_max_per_hour: requireCount(parsed, 'velocity_max_per_hour'),
     category_denylist: requireStringList(parsed, 'category_denylist'),
     require_mandate_headroom: parsed.require_mandate_headroom !== false,
+    max_qty_per_sku: requirePositiveCount(parsed, 'max_qty_per_sku'),
+    max_line_items: requirePositiveCount(parsed, 'max_line_items'),
+    gate_if_price_above_category_median_multiple: requireMultiple(
+      parsed,
+      'gate_if_price_above_category_median_multiple',
+    ),
   };
   if (policy.gate_above_paise > policy.per_txn_max_paise) {
     throw new Error(
@@ -46,6 +52,24 @@ function requireCount(parsed: Partial<PolicyConfig>, key: keyof PolicyConfig): n
     throw new Error(`policy.yaml: ${key} must be a non-negative integer`);
   }
   return value as number;
+}
+
+/** A count that must be at least 1: a cap of zero would deny every basket. */
+function requirePositiveCount(parsed: Partial<PolicyConfig>, key: keyof PolicyConfig): number {
+  const value = parsed[key];
+  if (!Number.isSafeInteger(value) || (value as number) < 1) {
+    throw new Error(`policy.yaml: ${key} must be an integer of at least 1`);
+  }
+  return value as number;
+}
+
+/** A ratio rather than an amount, so a fraction is legitimate here. */
+function requireMultiple(parsed: Partial<PolicyConfig>, key: keyof PolicyConfig): number {
+  const value = parsed[key];
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new Error(`policy.yaml: ${key} must be a positive number`);
+  }
+  return value;
 }
 
 function requireStringList(parsed: Partial<PolicyConfig>, key: keyof PolicyConfig): string[] {

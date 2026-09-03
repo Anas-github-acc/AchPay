@@ -20,15 +20,32 @@ export const POLICY: PolicyConfig = {
   gate_above_paise: 30_000,
   category_denylist: ['alcohol', 'tobacco'],
   require_mandate_headroom: true,
+  max_qty_per_sku: 3,
+  max_line_items: 10,
+  gate_if_price_above_category_median_multiple: 2.0,
 };
 
+/**
+ * A PolicyQuote fixture.
+ *
+ * `category_median_paise` defaults to 0, which the median rule reads as "no
+ * median available" and skips — so a fixture only exercises that rule when it
+ * says so explicitly. Every amount-rule test below therefore keeps the verdict
+ * it had before the rule existed.
+ */
 export function quote(totalPaise: number, lines?: Partial<PolicyQuoteLine>[]): PolicyQuote {
-  const built: PolicyQuoteLine[] = (lines ?? [{}]).map((line, i) => ({
-    sku: line.sku ?? `SKU-${i}`,
-    category: line.category ?? 'snacks',
-    qty: line.qty ?? 1,
-    line_total_paise: line.line_total_paise ?? totalPaise,
-  }));
+  const built: PolicyQuoteLine[] = (lines ?? [{}]).map((line, i) => {
+    const qty = line.qty ?? 1;
+    const lineTotal = line.line_total_paise ?? totalPaise;
+    return {
+      sku: line.sku ?? `SKU-${i}`,
+      category: line.category ?? 'snacks',
+      qty,
+      unit_price_paise: line.unit_price_paise ?? Math.floor(lineTotal / qty),
+      line_total_paise: lineTotal,
+      category_median_paise: line.category_median_paise ?? 0,
+    };
+  });
   return { quote_id: 'qt_test', total_paise: totalPaise, lines: built };
 }
 

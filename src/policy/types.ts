@@ -7,6 +7,16 @@ export interface PolicyConfig {
   gate_above_paise: number;
   category_denylist: string[];
   require_mandate_headroom: boolean;
+  /** Most units of any single sku one transaction may contain. */
+  max_qty_per_sku: number;
+  /** Most distinct skus one transaction may contain. */
+  max_line_items: number;
+  /**
+   * A unit price above this multiple of its category median needs a human look.
+   * A ratio, not money, so it may be fractional — see evaluate() for how it is
+   * compared without a float ever touching a paise amount.
+   */
+  gate_if_price_above_category_median_multiple: number;
 }
 
 /**
@@ -27,7 +37,14 @@ export interface PolicyQuoteLine {
   sku: string;
   category: string;
   qty: number;
+  unit_price_paise: number;
   line_total_paise: number;
+  /**
+   * Median unit price for this line's category, stamped onto the quote by the
+   * quote service and covered by the quote signature. The engine reads it; it
+   * never computes it, because computing it would mean reaching for the catalog.
+   */
+  category_median_paise: number;
 }
 
 export type MandateStatus = 'active' | 'revoked' | 'expired';
@@ -64,6 +81,9 @@ export interface PolicyInput {
 
 export type RuleId =
   | 'category_denylist'
+  | 'max_qty_per_sku'
+  | 'max_line_items'
+  | 'category_median_multiple'
   | 'mandate_missing'
   | 'mandate_revoked'
   | 'mandate_expired'

@@ -281,16 +281,18 @@ describe('checkout', () => {
     const mandate = await mandateFor(5_000_000);
     const adapter = new CountingAdapter();
 
-    // Rs 400 each: over the Rs 300 gate, under the Rs 500 per-txn cap.
+    // Rs 415 each: over the Rs 300 gate, under the Rs 500 per-txn cap. A single
+    // unit rather than ten of a cheap sku, which max_qty_per_sku now denies
+    // before the amount rules get a look in.
     const spend = async () => {
-      const quote = await quoteFor([{ sku: 'BSC-PRL-300', qty: 10 }]); // Rs 400
+      const quote = await quoteFor([{ sku: 'COF-FIL-500', qty: 1 }]); // Rs 415
       return checkout({ quote_id: quote.quote_id, mandate_id: mandate.id }, deps(adapter));
     };
 
     const outcomes = [];
     for (let i = 0; i < 6; i += 1) outcomes.push(await spend());
 
-    // The first five gate (Rs 400 is over the Rs 300 threshold) so none charge;
+    // The first five gate (Rs 415 is over the Rs 300 threshold) so none charge;
     // gates do not add to spend, so the daily cap is never reached here.
     expect(outcomes.every((o) => o.status === 'pending_approval')).toBe(true);
     expect(adapter.calls).toBe(0);
@@ -302,9 +304,10 @@ describe('checkout', () => {
     const mandate = await mandateFor(5_000_000);
     const adapter = new CountingAdapter();
 
-    // Rs 280 per go: under the Rs 300 gate, so each one actually charges.
+    // Rs 245 per go: under the Rs 300 gate, so each one actually charges. One
+    // unit of one sku, so the choice-bounding rules stay out of the way.
     const spend = async () => {
-      const quote = await quoteFor([{ sku: 'BSC-PRL-300', qty: 7 }]); // Rs 280
+      const quote = await quoteFor([{ sku: 'CHAI-GRN-100', qty: 1 }]); // Rs 245
       return checkout({ quote_id: quote.quote_id, mandate_id: mandate.id }, deps(adapter));
     };
 
@@ -314,7 +317,7 @@ describe('checkout', () => {
     expect(outcomes.slice(0, 5).every((o) => o.status === 'charged')).toBe(true);
     expect(outcomes[5]).toMatchObject({ status: 'denied', rule_id: 'velocity' });
     expect(adapter.calls).toBe(5);
-    expect((await getMandate(mandate.id))!.used_paise).toBe(140_000);
+    expect((await getMandate(mandate.id))!.used_paise).toBe(122_500);
     expect(await verifyChain()).toMatchObject({ ok: true });
   });
 
@@ -329,22 +332,22 @@ describe('checkout', () => {
       const mandate = await mandateFor(5_000_000);
       const adapter = new CountingAdapter();
 
-      // Rs 280 per go, under the Rs 300 gate. The daily cap is Rs 2000, so
-      // the eighth (which would reach Rs 2240) must be denied.
+      // Rs 245 per go, under the Rs 300 gate. The daily cap is Rs 2000, so
+      // the ninth (which would reach Rs 2205) must be denied.
       const spend = async () => {
-        const quote = await quoteFor([{ sku: 'BSC-PRL-300', qty: 7 }]);
+        const quote = await quoteFor([{ sku: 'CHAI-GRN-100', qty: 1 }]);
         return checkout({ quote_id: quote.quote_id, mandate_id: mandate.id }, deps(adapter));
       };
 
       const outcomes = [];
-      for (let i = 0; i < 8; i += 1) outcomes.push(await spend());
+      for (let i = 0; i < 9; i += 1) outcomes.push(await spend());
 
       const charged = outcomes.filter((o) => o.status === 'charged');
       const denied = outcomes.filter((o) => o.status === 'denied');
-      expect(charged).toHaveLength(7); // 7 x Rs 280 = Rs 1960, inside the cap
+      expect(charged).toHaveLength(8); // 8 x Rs 245 = Rs 1960, inside the cap
       expect(denied).toHaveLength(1);
       expect(denied[0]).toMatchObject({ rule_id: 'daily_max' });
-      expect(adapter.calls).toBe(7);
+      expect(adapter.calls).toBe(8);
       expect((await getMandate(mandate.id))!.used_paise).toBe(196_000);
       expect(await verifyChain()).toMatchObject({ ok: true });
     } finally {
