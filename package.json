@@ -17,7 +17,9 @@
     "verify:ledger": "tsx scripts/verify-ledger.ts",
     "smoke:razorpay": "tsx scripts/razorpay-smoke.ts",
     "test:webhook-live": "tsx scripts/webhook-live-test.ts",
-    "test:autopay": "tsx scripts/autopay-test.ts"
+    "test:autopay": "tsx scripts/autopay-test.ts",
+    "mcp": "tsx src/mcp/server.ts",
+    "mcp:inspect": "npx @modelcontextprotocol/inspector node_modules/.bin/tsx src/mcp/server.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
