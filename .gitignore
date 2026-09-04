@@ -4,3 +4,4 @@ dist/
 *.log
 .pnpm-store/
 data/ingest-report.json
+data/adversarial-results.json
