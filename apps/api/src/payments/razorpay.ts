@@ -121,9 +121,26 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
 
     try {
       const customerId = await this.ensureCustomer(mandate);
-      return mandate.provider_token
-        ? await this.debitRegisteredMandate(req, customerId, mandate.provider_token)
-        : await this.createMandateOrder(req, customerId, tokenMax);
+      if (!mandate.provider_token) {
+        return await this.createMandateOrder(req, customerId, tokenMax);
+      }
+
+      try {
+        return await this.debitRegisteredMandate(req, customerId, mandate.provider_token);
+      } catch (err) {
+        // The account cannot debit this token from a server. That is a
+        // permission on the account, not a fault in the purchase: the basket,
+        // the policy decision and the mandate are all still good, and the only
+        // thing missing is the silent debit.
+        //
+        // Falling back to an order the payer confirms keeps the purchase
+        // possible instead of dead. It costs the autonomy — a human is back in
+        // the loop for this one payment — so it is never silent: the reason
+        // travels with the result into the ledger, and the caller reports
+        // authorisation_required rather than anything resembling success.
+        if (!isNotEnabled(err)) throw err;
+        return await this.createPayableOrder(req, customerId, describeNotEnabled(err));
+      }
     } catch (err) {
       // A provider rejection is an outcome, not a crash: checkout's failure
       // path leaves used_paise alone and still writes a ledger row.
@@ -266,6 +283,51 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
   }
 
   /**
+   * A plain order for the payer to confirm, when the silent debit is not
+   * available.
+   *
+   * No token block: this mandate is already registered, and re-registering it
+   * is not what is being asked for. It is one order, for one basket, that one
+   * person confirms — and, like every other order here, it is not a payment
+   * until a webhook says so.
+   */
+  private async createPayableOrder(
+    req: ChargeRequest,
+    customerId: string,
+    note: string,
+  ): Promise<ChargeResult> {
+    const { mandate, amountPaise, idempotencyKey, note: description } = req;
+
+    const order = await this.client.orders.create({
+      amount: amountPaise,
+      currency: 'INR',
+      customer_id: customerId,
+      receipt: idempotencyKey.slice(0, RECEIPT_MAX),
+      notes: {
+        mandate_id: mandate.id,
+        user_ref: mandate.user_ref,
+        idempotency_key: idempotencyKey,
+        note: description,
+        fallback: 'recurring_debit_unavailable',
+      },
+    });
+    if (!order?.id) throw new ProviderError('Razorpay returned an order with no id');
+
+    if (order.amount !== amountPaise) {
+      throw new ProviderError(
+        `Razorpay created order ${order.id} for ${order.amount} paise, not ${amountPaise}`,
+      );
+    }
+
+    return {
+      ref: order.id,
+      status: 'authorisation_required',
+      provider_customer_id: customerId,
+      provider_note: note,
+    };
+  }
+
+  /**
    * Asks Razorpay what became of an order, for payments no webhook ever
    * settled.
    *
@@ -374,6 +436,29 @@ function assertChargeable(req: ChargeRequest): void {
   }
   if (!req.idempotencyKey) throw new Error('idempotencyKey is required');
   if (!req.mandate) throw new Error('a mandate is required');
+}
+
+/**
+ * Whether Razorpay refused an endpoint the account is not enabled for.
+ *
+ * It answers "the requested URL was not found on the server" for these, which
+ * reads like a bug in the caller and is not one. Matched narrowly: a genuine
+ * routing mistake would look the same, and the cost of confusing the two is a
+ * fallback that hides a real bug.
+ */
+function isNotEnabled(err: unknown): boolean {
+  const description = (err as { error?: { description?: string } })?.error?.description;
+  return typeof description === 'string' && /requested URL was not found/i.test(description);
+}
+
+function describeNotEnabled(err: unknown): string {
+  void err;
+  return (
+    'Razorpay refused the server-to-server recurring debit for this token ' +
+    '(it answers "the requested URL was not found" for endpoints an account ' +
+    'is not enabled for). Fell back to an order the payer confirms. To debit ' +
+    'silently, ask Razorpay support to enable recurring / S2S payments.'
+  );
 }
 
 /** Flattens an SDK error into something safe to put in front of an agent. */

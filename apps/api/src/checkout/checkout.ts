@@ -290,6 +290,9 @@ async function runCharge(tx: pg.PoolClient, ctx: ChargeContext): Promise<Checkou
           adapter: adapter.name,
           idempotency_key: key,
           authorisation_url: authorisationUrl(charged.ref),
+          // Why a human is in this loop at all, when the mandate may already
+          // be registered. Kept on the row so the ledger explains itself.
+          ...(charged.provider_note ? { provider_note: charged.provider_note } : {}),
           lines: quote.lines.map((line) => ({
             sku: line.sku,
             title: line.title,

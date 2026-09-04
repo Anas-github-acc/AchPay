@@ -93,10 +93,13 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
   // it is finished; it waits to be told by the API, which waits to be told by
   // a verified webhook.
   useEffect(() => {
-    if (data?.mandate_registered && data.status !== 'awaiting_authorisation') return;
+    // Poll while the payment is unsettled; a settled one never changes again.
+    if (data && (data.status === 'captured' || data.status === 'failed' || data.status === 'abandoned')) {
+      return;
+    }
     const timer = setInterval(() => void load(), POLL_MS);
     return () => clearInterval(timer);
-  }, [load, data?.mandate_registered, data?.status]);
+  }, [load, data?.status]);
 
   const open = useCallback(async () => {
     if (!data?.key_id) {
@@ -112,13 +115,17 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
         key: data.key_id,
         order_id: data.order_ref,
         ...(data.customer_id ? { customer_id: data.customer_id } : {}),
-        recurring: 1,
+        // Only a registration mints a token. A fallback payment on an
+        // already-registered mandate is an ordinary one-off.
+        ...(data.mandate_registered ? {} : { recurring: 1 }),
         name: data.merchant_name,
-        description: `Authorise spending up to ${
-          data.mandate_max_amount_paise === null
-            ? 'the mandate ceiling'
-            : formatPaise(data.mandate_max_amount_paise)
-        }`,
+        description: !data.mandate_registered
+          ? `Authorise spending up to ${
+              data.mandate_max_amount_paise === null
+                ? 'the mandate ceiling'
+                : formatPaise(data.mandate_max_amount_paise)
+            }`
+          : `Payment of ${formatPaise(data.amount_paise)}`,
         // Nothing is confirmed here. The handler only stops the spinner; the
         // mandate is registered by the webhook or not at all.
         handler: () => {
@@ -161,20 +168,25 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
     );
   }
 
-  const registered = data.mandate_registered;
+  // What this page shows is decided by the *payment*, not by the mandate.
+  // A registered mandate can still land here: if the account cannot debit a
+  // token from a server, the adapter falls back to an order the payer
+  // confirms, and that order needs this button exactly as a first one does.
   const settled = data.status === 'captured';
   const dead = data.status === 'failed' || data.status === 'abandoned';
+  const pending = !settled && !dead;
+  const registering = !data.mandate_registered;
 
   return (
     <main className="page authorise-stack" id="main">
       <div className="page-head">
         <div>
-          <p className="eyebrow">One-time setup</p>
-          <h1>Authorise this mandate</h1>
+          <p className="eyebrow">{registering ? 'One-time setup' : 'Confirm payment'}</p>
+          <h1>{registering ? 'Authorise this mandate' : 'Confirm this purchase'}</h1>
           <p>
-            An agent is asking to spend on your behalf. Approving here registers the mandate with
-            Razorpay once — after this, purchases inside the limits happen without you, and every
-            one of them lands in the ledger.
+            {registering
+              ? 'An agent is asking to spend on your behalf. Approving here registers the mandate with Razorpay once — after this, purchases inside the limits happen without you, and every one of them lands in the ledger.'
+              : 'This mandate is already authorised, but this payment could not be taken automatically, so it needs your confirmation. The amount and the basket below are the ones the policy already approved.'}
           </p>
         </div>
       </div>
@@ -201,7 +213,7 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
           <span>Total</span>
           <strong className="amount">{formatPaise(data.amount_paise)}</strong>
         </p>
-        {data.mandate_max_amount_paise !== null && (
+        {registering && data.mandate_max_amount_paise !== null && (
           <p className="dim">
             You are also authorising future purchases up to{' '}
             {formatPaise(data.mandate_max_amount_paise)}, inside the spending policy.
@@ -209,14 +221,15 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
         )}
       </section>
 
-      {registered ? (
+      {settled ? (
         <section className="card card--ok">
-          <h2>Mandate registered</h2>
+          <h2>Paid</h2>
           <p>
-            Razorpay confirmed the authorisation and the token is stored. The agent can spend inside
-            the policy from now on without asking you again.
+            Razorpay confirmed this payment.
+            {data.mandate_registered
+              ? ' The mandate is registered, so the agent can spend inside the policy without asking you again.'
+              : ' The mandate was not registered by it, so a future purchase may ask you once more.'}
           </p>
-          {settled && <p className="dim">This purchase has captured.</p>}
         </section>
       ) : dead ? (
         <section className="card card--bad">
@@ -228,13 +241,17 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
         </section>
       ) : (
         <section className="card">
-          <h2>Authorise</h2>
+          <h2>{registering ? 'Authorise' : 'Confirm this payment'}</h2>
           <p className="dim">
-            Opens Razorpay. The mandate is registered only when Razorpay confirms it back to this
-            storefront — this page cannot confirm itself.
+            Opens Razorpay. Nothing is settled until Razorpay confirms it back to this storefront —
+            this page cannot confirm itself.
           </p>
           <button className="button" onClick={() => void open()} disabled={opening}>
-            {opening ? 'Waiting for Razorpay…' : 'Authorise with Razorpay'}
+            {opening
+              ? 'Waiting for Razorpay…'
+              : registering
+                ? 'Authorise with Razorpay'
+                : 'Pay with Razorpay'}
           </button>
           {note && <p className="dim">{note}</p>}
         </section>

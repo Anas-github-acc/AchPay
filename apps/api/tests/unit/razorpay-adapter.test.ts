@@ -363,4 +363,93 @@ describe('ReservePayAdapter', () => {
     expect(typeof adapter.charge).toBe('function');
     expect(typeof adapter.name).toBe('string');
   });
+
+  it('falls back to a payer-confirmed order when the account cannot debit', async () => {
+    // Razorpay answers "the requested URL was not found" for endpoints an
+    // account is not enabled for. The purchase is still good — basket, policy
+    // and mandate all pass — so the adapter opens an order a person confirms
+    // rather than reporting a dead charge.
+    const orders: (MandateOrderCreateBody | PlainOrderCreateBody)[] = [];
+    const { client } = recordingClient({
+      orders: {
+        async create(body) {
+          orders.push(body);
+          return {
+            id: 'order_FALLBACK',
+            entity: 'order',
+            amount: body.amount,
+            currency: 'INR',
+            status: 'created',
+          };
+        },
+        async fetch(orderId: string) {
+          return { id: orderId, entity: 'order', amount: 0, currency: 'INR', status: 'created', attempts: 0 };
+        },
+        async fetchPayments() {
+          return { items: [] };
+        },
+      },
+      payments: {
+        async createRecurringPayment() {
+          throw {
+            statusCode: 400,
+            error: {
+              code: 'BAD_REQUEST_ERROR',
+              description: 'The requested URL was not found on the server.',
+            },
+          };
+        },
+      },
+    });
+    const adapter = new RazorpayMandateAdapter({
+      client,
+      db: fakeDb({ customerId: 'cust_ONFILE0001' }),
+    });
+
+    const result = await adapter.charge(
+      chargeReq({
+        mandate: mandate({ provider_token: 'token_ABC', provider_customer_id: 'cust_ONFILE0001' }),
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ref: 'order_FALLBACK',
+      status: 'authorisation_required',
+      provider_customer_id: 'cust_ONFILE0001',
+    });
+    // Never silent: the reason travels with the result into the ledger.
+    expect(result.provider_note).toMatch(/requested URL was not found/i);
+    // A plain order. The mandate is already registered and re-registering it
+    // is not what was asked for.
+    expect(orders.at(-1)).not.toHaveProperty('token');
+    expect(orders.at(-1)!.amount).toBe(4_000);
+  });
+
+  it('does not fall back for an ordinary provider refusal', async () => {
+    // The fallback exists for a disabled endpoint, not for a decline. Widening
+    // it would turn real failures into a person being asked to pay by hand.
+    const { client } = recordingClient({
+      payments: {
+        async createRecurringPayment() {
+          throw {
+            statusCode: 400,
+            error: { code: 'BAD_REQUEST_ERROR', description: 'Token is not valid' },
+          };
+        },
+      },
+    });
+    const adapter = new RazorpayMandateAdapter({
+      client,
+      db: fakeDb({ customerId: 'cust_ONFILE0001' }),
+    });
+
+    const result = await adapter.charge(
+      chargeReq({
+        mandate: mandate({ provider_token: 'token_ABC', provider_customer_id: 'cust_ONFILE0001' }),
+      }),
+    );
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('Token is not valid');
+  });
 });

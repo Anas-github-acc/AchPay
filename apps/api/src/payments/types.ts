@@ -52,6 +52,12 @@ export interface ChargeResult {
    * alone, without a second lookup against the provider.
    */
   provider_customer_id?: string;
+  /**
+   * Why the adapter answered as it did, when the answer was not the obvious
+   * one — a registered mandate that had to fall back to asking the payer, say.
+   * Recorded in the ledger. Never a substitute for the status.
+   */
+  provider_note?: string;
 }
 
 /**
