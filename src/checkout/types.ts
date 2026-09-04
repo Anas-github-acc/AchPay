@@ -34,6 +34,14 @@ export type CheckoutResult =
       amount_paise: number;
       rule_id: RuleId;
       reason: string;
+      /**
+       * Nothing has been charged. The only way forward is a human opening
+       * approval_url; there is no argument, header or retry that makes this
+       * result turn into a charge on the caller's own authority.
+       */
+      approval_token: string;
+      approval_url: string;
+      approval_expires_at: string;
       ledger_seq: number;
     })
   | (Base & {

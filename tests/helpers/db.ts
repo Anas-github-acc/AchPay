@@ -12,6 +12,7 @@ export async function resetAll(): Promise<void> {
   await pool.query('truncate mandates');
   await pool.query('truncate payments');
   await pool.query('truncate webhook_events');
+  await pool.query('truncate pending_approvals');
 }
 
 export async function countLedger(where: string, params: unknown[] = []): Promise<number> {

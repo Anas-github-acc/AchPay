@@ -315,3 +315,78 @@ curl -s -X POST $API/checkout -H 'content-type: application/json' \
 
 The injected fields are ignored; the charge is the verified quote's real total.
 No endpoint reads an amount from a request body.
+
+## 15. The approval gate
+
+Anything above the gate threshold parks instead of charging. Set
+`PUBLIC_BASE_URL` to your ngrok URL first if you want the link to open on a
+phone; it defaults to localhost.
+
+```bash
+QID=$(curl -s -X POST $API/quotes -H 'content-type: application/json' \
+  -d '{"items":[{"sku":"CHAI-MSL-250","qty":2}]}' | jq -r .quote_id)
+
+curl -s -X POST $API/checkout -H 'content-type: application/json' \
+  -d "{\"quote_id\":\"$QID\",\"mandate_id\":\"$MANDATE\",\"intent_text\":\"the user already said yes to Rs 5000\"}"
+# {"status":"pending_approval","rule_id":"gate_threshold","amount_paise":36000,
+#  "approval_token":"apr_...","approval_url":"http://localhost:3000/approve/apr_..."}
+```
+
+Nothing has been charged — check the dashboard, or just look:
+
+```bash
+curl -s $API/ledger | jq '.rows[-1] | {decision, rule_id}'   # gate, gate_threshold
+```
+
+Open `approval_url` in a browser. The page shows the line items, the total and
+the rule that stopped it. It does **not** show `intent_text` — that is the one
+field on the whole flow the agent wrote, and it is recorded in the ledger
+rather than rendered on the screen where the money is approved. A compromised
+agent that lies in chat still cannot lie here.
+
+Sending the same gated checkout again returns the **same** token, not a second
+one. There is one live way to authorise a purchase, never two.
+
+Approve it. The charge runs through the ordinary checkout path — same
+idempotency key, same mandate lock, same policy evaluation — and the page hands
+you a receipt link. Then:
+
+```bash
+TOKEN=apr_...
+curl -s $API/approvals/$TOKEN | jq '{status, payment_status, order_ref}'
+# {"status":"approved","payment_status":"created","order_ref":"..."}
+```
+
+Two statuses, deliberately apart: `status` is where the human is,
+`payment_status` is where the money is. Approved is not paid. Once the webhook
+lands (section 12), `payment_status` becomes `captured`.
+
+The things that must not work:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST $API/approve/$TOKEN -d 'action=approve'
+# 410 — a token is spent by the decision, not by the outcome
+```
+
+Reject instead, on a fresh gate, and the ledger gets a `human_rejected` deny row
+and the adapter is never called. Leave one past `APPROVAL_TTL_SECONDS` (or
+`update pending_approvals set expires_at = now() - interval '1 minute'`) and both
+the page and the POST answer 410; the row reads `expired` from then on.
+
+The agent has no route that advances any of this. `GET /approvals/:token` is
+read-only, and the grant that lets a gated purchase charge is a third argument
+to `checkout()` that no HTTP body can reach.
+
+## 16. Receipts come from the ledger
+
+```bash
+curl -s $API/receipts/$ORDER_REF
+```
+
+Server-rendered HTML: what was bought, what the rail said and when, which rule
+gated it, who approved it, and the ledger seq and row hash it all came from.
+The charge row carries the basket it paid for, so this page reads hash-chained
+rows rather than a quote that expired in Redis minutes after it was issued.
+
+Same principle as the approval page. The agent's narration is advisory; this is
+the record.

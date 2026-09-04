@@ -44,9 +44,33 @@ function mandateFrequency(): Frequency {
   return raw as Frequency;
 }
 
+const port = Number(process.env.PORT ?? 3000);
+
+/**
+ * The origin an approval link has to be reachable at.
+ *
+ * Not derived from the incoming request: the link is built server-side and
+ * handed to an agent, and a Host header is caller-supplied. Point this at the
+ * ngrok URL when demoing, so the phone in the room can open it.
+ */
+function publicBaseUrl(): string {
+  return (process.env.PUBLIC_BASE_URL ?? `http://localhost:${port}`).replace(/\/+$/, '');
+}
+
+function approvalTtlSeconds(): number {
+  const raw = Number(process.env.APPROVAL_TTL_SECONDS ?? 900);
+  if (!Number.isSafeInteger(raw) || raw <= 0) {
+    throw new Error(`APPROVAL_TTL_SECONDS must be a positive integer; got ${raw}`);
+  }
+  return raw;
+}
+
 export const config = {
   isTest,
-  port: Number(process.env.PORT ?? 3000),
+  port,
+  publicBaseUrl: publicBaseUrl(),
+  /** How long a human has to act on a gated purchase before the token dies. */
+  approvalTtlSeconds: approvalTtlSeconds(),
   /** Tests get their own database so a run never clobbers dev data. */
   databaseUrl: isTest
     ? (process.env.TEST_DATABASE_URL ?? required('DATABASE_URL'))

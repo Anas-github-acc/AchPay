@@ -19,7 +19,8 @@
     "test:webhook-live": "tsx scripts/webhook-live-test.ts",
     "test:autopay": "tsx scripts/autopay-test.ts",
     "mcp": "tsx src/mcp/server.ts",
-    "mcp:inspect": "npx @modelcontextprotocol/inspector node_modules/.bin/tsx src/mcp/server.ts"
+    "mcp:inspect": "npx @modelcontextprotocol/inspector node_modules/.bin/tsx src/mcp/server.ts",
+    "mcp:add": "claude mcp add agent-storefront -- ./node_modules/.bin/tsx ./src/mcp/server.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

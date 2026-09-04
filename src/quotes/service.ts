@@ -88,8 +88,19 @@ export class QuoteService {
    *
    * Order matters. A tampered quote must report tampering, not staleness —
    * otherwise an attacker learns which of the two checks they tripped.
+   *
+   * `allowExpired` waives the two-minute window and nothing else — the
+   * signature and the full re-price still have to pass. It exists for one
+   * caller: a purchase a human has just approved. The short expiry is there to
+   * stop an agent replaying a stale quote, and a person walking to their phone
+   * takes longer than two minutes; the protection that actually matters there
+   * is the re-price, which still runs. There is no route that sets it.
    */
-  verify(candidate: unknown, at: Date = this.now()): VerifyQuoteResult {
+  verify(
+    candidate: unknown,
+    at: Date = this.now(),
+    opts: { allowExpired?: boolean } = {},
+  ): VerifyQuoteResult {
     const shapeError = checkShape(candidate);
     if (shapeError) return { ok: false, code: 'QUOTE_MALFORMED', reason: shapeError };
     const quote = candidate as SignedQuote;
@@ -106,7 +117,7 @@ export class QuoteService {
     if (!Number.isFinite(expiresAt)) {
       return { ok: false, code: 'QUOTE_MALFORMED', reason: 'expires_at is not a valid timestamp' };
     }
-    if (at.getTime() > expiresAt) {
+    if (!opts.allowExpired && at.getTime() > expiresAt) {
       return {
         ok: false,
         code: 'QUOTE_EXPIRED',

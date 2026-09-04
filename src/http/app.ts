@@ -10,6 +10,7 @@ import { pool } from '../db/pool.js';
 import { readAll, verifyChain } from '../ledger/ledger.js';
 import { checkout } from '../checkout/checkout.js';
 import { webhookRoutes } from './webhook-route.js';
+import { approvalRoutes } from './approval-routes.js';
 import { createMandate, getMandate, revokeMandate } from '../mandates/repo.js';
 import { createAdapter } from '../payments/index.js';
 import type { PaymentAdapter } from '../payments/types.js';
@@ -183,6 +184,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   await webhookRoutes(app);
+  // The human approval screens and the ledger-rendered receipt. Registered
+  // after checkout because they share its deps: an approved purchase runs
+  // through the same checkout() call, not a second charge path.
+  await approvalRoutes(app, { quotes, quoteStore, adapter });
 
   app.get('/payments/:order_ref', async (request, reply) => {
     const { order_ref } = request.params as { order_ref: string };

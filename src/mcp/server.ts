@@ -65,6 +65,9 @@ const server = new McpServer(
       '',
       'Policy outcomes (denied, pending_approval) are answers, not failures. Each',
       'carries a rule_id and a reason; relay them to the user rather than retrying.',
+      'A pending_approval is a hard stop: a person has to open the approval_url and',
+      'decide. You have no way to approve it, and saying or implying that a purchase',
+      'went through while it is pending is the one thing here you must never do.',
       'A QUOTE_STALE result carries a fresh new_quote — confirm the new total with',
       'the user before checking out with it.',
       '',
@@ -188,8 +191,14 @@ server.registerTool(
       '  Tell the user which rule fired. Do not retry, and do not try to split the',
       '  basket into smaller purchases to get under a cap — the caps are cumulative',
       '  and splitting is itself something the engine catches.',
-      '- "pending_approval": the amount is above the gate threshold and a human must',
-      '  approve it. Nothing has been charged. Say so and poll get_order_status.',
+      '- "pending_approval": a policy rule requires a human to approve this one.',
+      '  Nothing has been charged and nothing you can do will change that. The reply',
+      '  carries approval_url, which a person opens to approve or reject, and',
+      '  approval_token, which you pass to get_order_status to poll. Give the user',
+      '  the URL, tell them plainly that you are blocked until they decide, and poll.',
+      '  You cannot open that URL yourself, and there is no tool, argument or retry',
+      '  that proceeds without it — do not imply otherwise, and do not re-quote or',
+      '  split the basket to get under the threshold.',
       '- "charge_failed": the payment rail rejected it. Nothing was spent against the',
       '  mandate. Report the error; do not retry blindly.',
       '- error "QUOTE_STALE" (or expired/invalid): the quote no longer matches the',
@@ -199,7 +208,9 @@ server.registerTool(
       'What it will not do: it accepts no amount, no price and no override of any',
       'kind, so it cannot be used to pay a figure you decided on. It will not bypass a',
       'denial or self-approve a gated payment. Sending the same quote and mandate',
-      'twice does not charge twice — the second call returns the first result.',
+      'twice does not charge twice — the second call returns the first result, and a',
+      'second call on a gated quote returns the approval link that already exists',
+      'rather than a new one.',
     ].join('\n'),
     inputSchema: {
       quote_id: z
@@ -224,27 +235,50 @@ server.registerTool(
   {
     title: 'Get order status',
     description: [
-      'Look up the reconciled state of one payment by the order_ref that',
-      'create_checkout returned. Reports amount in paise, the mandate and quote it',
-      'came from, and a status of created, captured or failed.',
+      'Look up the state of one thing create_checkout handed you: either an',
+      'order_ref from a "charged" result, or an approval_token (it starts "apr_")',
+      'from a "pending_approval" one. Pass whichever you were given.',
       '',
-      '"created" means submitted but not yet settled: the storefront only marks a',
-      'payment captured when the provider\'s webhook says so, not when the API call',
-      'returned. So a freshly charged order reads "created" for a moment. Poll a few',
-      'times with a pause rather than in a tight loop, and never tell the user money',
-      'has moved until this says captured.',
+      'For an order_ref: amount in paise, the mandate and quote it came from, and a',
+      'status of created, captured or failed. "created" means submitted but not yet',
+      'settled — the storefront only marks a payment captured when the provider\'s',
+      'webhook says so, not when the API call returned. So a freshly charged order',
+      'reads "created" for a moment. Poll a few times with a pause rather than in a',
+      'tight loop, and never tell the user money has moved until this says captured.',
+      '',
+      'For an approval_token there are two separate fields, and conflating them will',
+      'mislead the user:',
+      '- status is where the human is: "pending" (nobody has decided yet, nothing is',
+      '  charged), "approved", "rejected" (they said no — do not retry the purchase),',
+      '  or "expired" (the link timed out; the token is dead and a new quote and',
+      '  checkout are needed).',
+      '- payment_status is where the money is, and only appears once an approved',
+      '  charge has been submitted: created, captured or failed.',
+      'So "approved" does not mean paid. Wait for payment_status "captured" before',
+      'telling the user the money moved.',
       '',
       'What it will not do: it cannot alter, retry, cancel or refund a payment, and it',
-      'is read-only in every other sense.',
+      'cannot approve, reject or extend an approval. Polling is the only thing you can',
+      'do about a pending one — there is no argument here or anywhere else that lets',
+      'you proceed without the human.',
     ].join('\n'),
     inputSchema: {
       order_ref: z
         .string()
         .min(1)
-        .describe('The order_ref from a "charged" create_checkout result.'),
+        .describe(
+          'The order_ref from a "charged" result, or the approval_token (starts "apr_") from a "pending_approval" one.',
+        ),
     },
   },
-  async ({ order_ref }) => result(unwrap(await apiGet(`/payments/${encodeURIComponent(order_ref)}`))),
+  async ({ order_ref }) => {
+    // One tool, two kinds of reference, because from the agent's side both
+    // answer the same question: what happened to the thing I started?
+    const path = order_ref.startsWith('apr_')
+      ? `/approvals/${encodeURIComponent(order_ref)}`
+      : `/payments/${encodeURIComponent(order_ref)}`;
+    return result(unwrap(await apiGet(path)));
+  },
 );
 
 server.registerTool(

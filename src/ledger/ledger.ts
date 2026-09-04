@@ -188,6 +188,30 @@ export async function readAll(limit = 1000): Promise<LedgerRow[]> {
   return rows.map(toRow);
 }
 
+/**
+ * Every row that mentions one order reference, oldest first.
+ *
+ * This is the receipt: the charge, and every webhook that later moved it. The
+ * page reads these rows rather than the payments projection on purpose — the
+ * projection is convenient, the ledger is the evidence.
+ */
+export async function readByOrderRef(orderRef: string): Promise<LedgerRow[]> {
+  const { rows } = await pool.query<RawLedgerRow>(
+    'select * from ledger where razorpay_ref = $1 order by seq asc',
+    [orderRef],
+  );
+  return rows.map(toRow);
+}
+
+/** Every row for one quote, oldest first. The decisions behind a purchase. */
+export async function readByQuoteId(quoteId: string): Promise<LedgerRow[]> {
+  const { rows } = await pool.query<RawLedgerRow>(
+    'select * from ledger where quote_id = $1 order by seq asc',
+    [quoteId],
+  );
+  return rows.map(toRow);
+}
+
 export async function tip(): Promise<LedgerRow | undefined> {
   const { rows } = await pool.query<RawLedgerRow>(
     'select * from ledger order by seq desc limit 1',
