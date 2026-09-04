@@ -1,4 +1,6 @@
-export type Decision = 'allow' | 'gate' | 'deny';
+import type { MandateStatus } from '@storefront/shared';
+
+export type { Decision, MandateStatus, PolicyDecision, RuleId } from '@storefront/shared';
 
 export interface PolicyConfig {
   per_txn_max_paise: number;
@@ -23,7 +25,7 @@ export interface PolicyConfig {
  * The only view of a quote the policy engine ever sees.
  *
  * Note what is absent: `title`, `description`, and every other free-text field.
- * The projection in src/policy/project.ts drops them, so the engine cannot read
+ * The projection in project.ts drops them, so the engine cannot read
  * attacker-influenced prose even by accident. This is the prompt-injection
  * defence, and it is structural rather than a matter of discipline.
  */
@@ -46,8 +48,6 @@ export interface PolicyQuoteLine {
    */
   category_median_paise: number;
 }
-
-export type MandateStatus = 'active' | 'revoked' | 'expired';
 
 export interface PolicyMandate {
   id: string;
@@ -77,28 +77,4 @@ export interface PolicyInput {
   now?: Date;
   /** Defaults to the policy.yaml loaded at boot. */
   policy?: PolicyConfig;
-}
-
-export type RuleId =
-  | 'category_denylist'
-  | 'max_qty_per_sku'
-  | 'max_line_items'
-  | 'category_median_multiple'
-  | 'mandate_missing'
-  | 'mandate_revoked'
-  | 'mandate_expired'
-  | 'headroom'
-  | 'per_txn_max'
-  | 'daily_max'
-  | 'velocity'
-  | 'gate_threshold'
-  | 'all_checks_passed';
-
-export interface PolicyDecision {
-  decision: Decision;
-  /** Always present, including on allow. This is what makes the ledger explainable. */
-  rule_id: RuleId;
-  reason: string;
-  /** The numbers the rule actually compared. Written to the ledger payload. */
-  observed: Record<string, number | string>;
 }

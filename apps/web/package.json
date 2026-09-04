@@ -1,0 +1,24 @@
+{
+  "name": "@storefront/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dashboard: ledger feed, chain verification and the adversarial grid. Built later.",
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@storefront/shared": "workspace:*",
+    "next": "^15.5.4",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "typescript": "^5.9.3"
+  }
+}

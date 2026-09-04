@@ -24,5 +24,49 @@ Build plan: see build-plan.md. Work one phase at a time.
   explain rather than working around it.
 - Never mention phase names or numbers in folder name and any file, they are just to divide my work loads.
 
+## Layout
+
+A pnpm workspace. `pnpm -r` is the only orchestration; there is no Turborepo,
+and nothing here is slow enough to want one yet.
+
+```
+apps/
+  api/            everything that runs: catalog, quotes, policy, ledger,
+                  payments, mandates, approvals, webhooks, HTTP, MCP,
+                  plus src/db/migrations and the whole test suite
+  web/            dashboard. Scaffold only so far.
+packages/
+  shared/         types only, no runtime code. Imported by both apps as
+                  @storefront/shared, always with `import type`.
+data/             catalog.json, and the reports the app writes
+policy.yaml       the spending policy
+.env              not committed; every script below runs from the repo root,
+                  which is why this file stays here
+```
+
+`packages/shared` holds exactly the types both apps need: the ledger row and
+its event_type union, PolicyDecision and its rule_id union, Product, the quote
+and its lines, the mandate and its status, and the shape of
+data/adversarial-results.json. Anything with behaviour lives in apps/api, and
+each app-side types file re-exports its shared types so imports stay local to
+the code that uses them.
+
+Note on paths: `data/` and `policy.yaml` sit at the repo root, so every script
+runs with the repo root as the working directory. `pnpm --filter` on a runtime
+script would move the working directory and lose `.env`.
+
 ## Commands
-pnpm dev / pnpm test / pnpm test:adversarial
+
+Run from the repo root.
+
+```
+pnpm dev               API on :3000, watching
+pnpm start             API once, no watch
+pnpm dev:web           dashboard on :3001
+pnpm test              every test, from apps/api
+pnpm test:adversarial  the attack grid, writes data/adversarial-results.json
+pnpm typecheck         every package
+pnpm build             every package
+pnpm verify:ledger     walk the hash chain
+pnpm mcp               the MCP server over stdio
+```

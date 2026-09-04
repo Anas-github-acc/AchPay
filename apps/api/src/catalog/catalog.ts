@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { sanitiseCatalog } from './sanitise.js';
 import type { IngestReport, Product, ProductQuery, RawProduct } from './types.js';
 
-const dataDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'data');
+const dataDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'data');
 const defaultCatalogPath = join(dataDir, 'catalog.json');
 const defaultReportPath = join(dataDir, 'ingest-report.json');
 

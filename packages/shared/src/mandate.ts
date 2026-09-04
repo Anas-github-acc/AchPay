@@ -15,11 +15,3 @@ export interface MandateRecord {
   provider_customer_id: string | null;
   created_at: string;
 }
-
-export interface CreateMandateInput {
-  user_ref: string;
-  max_amount_paise: number;
-  expires_at: string | Date;
-  provider_token?: string | null;
-  provider_customer_id?: string | null;
-}

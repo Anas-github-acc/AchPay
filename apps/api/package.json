@@ -1,0 +1,31 @@
+{
+  "name": "@storefront/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Catalog, quotes, policy, ledger, payments, HTTP routes and the MCP server.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@storefront/shared": "workspace:*",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.6.1",
+    "ioredis": "^5.9.0",
+    "pg": "^8.16.3",
+    "razorpay": "^2.9.8",
+    "yaml": "^2.8.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "@types/pg": "^8.15.6",
+    "tsx": "^4.20.7",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,7 +1,9 @@
 node_modules/
 dist/
+.next/
 .env
 *.log
 .pnpm-store/
 data/ingest-report.json
 data/adversarial-results.json
+*.tsbuildinfo

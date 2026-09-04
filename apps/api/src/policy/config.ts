@@ -8,6 +8,8 @@ const defaultPolicyPath = join(
   dirname(fileURLToPath(import.meta.url)),
   '..',
   '..',
+  '..',
+  '..',
   'policy.yaml',
 );
 

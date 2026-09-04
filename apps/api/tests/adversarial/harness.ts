@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
 import { verifyChain } from '../../src/ledger/ledger.js';
+import type { AdversarialReport, AttackResult } from '@storefront/shared';
 
 /**
  * The adversarial suite's scoreboard.
@@ -18,19 +19,7 @@ import { verifyChain } from '../../src/ledger/ledger.js';
  * webhooks — is the code that runs in production.
  */
 
-export interface AttackResult {
-  id: string;
-  /** The one-line name that goes on screen during the demo. */
-  name: string;
-  /** What the attacker tried, in a sentence a non-engineer can follow. */
-  attack: string;
-  /** True when the system held. */
-  held: boolean;
-  /** What actually stopped it, filled in by the test itself. */
-  evidence: string;
-  duration_ms: number;
-  error: string | null;
-}
+export type { AttackResult } from '@storefront/shared';
 
 const results: AttackResult[] = [];
 const startedAt = Date.now();
@@ -75,6 +64,8 @@ export function attack(spec: AttackSpec, fn: (evidence: Evidence) => Promise<voi
 
 const outputPath = join(
   dirname(fileURLToPath(import.meta.url)),
+  '..',
+  '..',
   '..',
   '..',
   'data',
@@ -125,23 +116,16 @@ export async function report(): Promise<void> {
 
   process.stdout.write(`${lines.join('\n')}\n`);
 
-  writeFileSync(
-    outputPath,
-    `${JSON.stringify(
-      {
-        generated_at: new Date().toISOString(),
-        suite: 'adversarial',
-        total: results.length,
-        held,
-        broken: results.length - held,
-        duration_ms: Date.now() - startedAt,
-        ledger_chain: chain,
-        attacks: results,
-      },
-      null,
-      2,
-    )}\n`,
-    'utf8',
-  );
+  const payload: AdversarialReport = {
+    generated_at: new Date().toISOString(),
+    suite: 'adversarial',
+    total: results.length,
+    held,
+    broken: results.length - held,
+    duration_ms: Date.now() - startedAt,
+    ledger_chain: chain,
+    attacks: results,
+  };
+  writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
   process.stdout.write(`${DIM}  results: ${outputPath}${RESET}\n\n`);
 }
