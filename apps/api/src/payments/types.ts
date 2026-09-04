@@ -3,13 +3,23 @@ import type { MandateRecord } from '../mandates/types.js';
 /**
  * Where a payment is.
  *
+ * 'awaiting_authorisation' is a mandate-registration order: the provider has
+ * an order but no one has authorised it, so nothing has been submitted and no
+ * money can move until a person acts. It is not 'created', which means the
+ * charge is in flight.
+ *
  * 'abandoned' is reachable only by reconciliation, never by a charge or a
  * webhook: it means the provider says this order was never attempted and its
  * authorisation window has closed. Kept distinct from 'failed' because the
  * rail declining a payment and the rail never being asked are different
  * facts, and only one of them is evidence about the customer.
  */
-export type ChargeStatus = 'created' | 'captured' | 'failed' | 'abandoned';
+export type ChargeStatus =
+  | 'awaiting_authorisation'
+  | 'created'
+  | 'captured'
+  | 'failed'
+  | 'abandoned';
 
 export interface ChargeRequest {
   /** Integer paise. Always derived from a verified quote, never from a caller. */
@@ -20,11 +30,28 @@ export interface ChargeRequest {
   note: string;
 }
 
+/**
+ * What an adapter reports back from a charge attempt.
+ *
+ * 'authorisation_required' is the honest answer to the first charge on a
+ * mandate the provider has never seen authorised. An order exists; a payment
+ * does not, and cannot until a human authorises the mandate. Reporting it as
+ * a charge would mean an agent could tell a user money had moved on the
+ * strength of an order id, which is exactly the confusion this avoids.
+ */
+export type ChargeOutcome = 'authorisation_required' | ChargeStatus;
+
 export interface ChargeResult {
   ref: string;
-  status: ChargeStatus;
+  status: ChargeOutcome;
   /** Present when status is 'failed'. Safe to show an agent. */
   error?: string;
+  /**
+   * The provider customer the order was opened against. Carried out of the
+   * adapter so the authorisation page can be rendered from the payment row
+   * alone, without a second lookup against the provider.
+   */
+  provider_customer_id?: string;
 }
 
 /**

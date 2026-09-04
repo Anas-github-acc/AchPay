@@ -154,7 +154,8 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
     const details = this.customerFor(mandate);
     const customer = await this.client.customers.create({
       ...details,
-      fail_existing: 0,
+      // A string. See CustomerCreateBody: the numeric 0 is rejected.
+      fail_existing: '0',
       notes: { user_ref: mandate.user_ref },
     });
     if (!customer?.id) throw new ProviderError('Razorpay returned a customer with no id');
@@ -209,7 +210,15 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
       );
     }
 
-    return { ref: order.id, status: 'created' };
+    // Not 'created'. An order is a request for a payment, not a payment: no
+    // one has authorised this mandate yet, nothing has been submitted, and no
+    // money can move until a person acts. checkout turns this into an
+    // authorisation link rather than a charge.
+    return {
+      ref: order.id,
+      status: 'authorisation_required',
+      provider_customer_id: customerId,
+    };
   }
 
   /**
@@ -250,7 +259,10 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
     });
 
     const ref = payment?.razorpay_payment_id ?? order.id;
-    return { ref, status: 'created' };
+    // 'created' this time, and the difference matters: the mandate is already
+    // authorised, so this really was submitted to the rail. Only a webhook
+    // moves it to captured.
+    return { ref, status: 'created', provider_customer_id: customerId };
   }
 
   /**

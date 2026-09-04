@@ -10,6 +10,9 @@ Build plan: see build-plan.md. Work one phase at a time.
   product fields. History is passed in as an argument.
 - Every policy decision returns a rule_id, including allow.
 - The ledger is insert-only. Never write UPDATE or DELETE against it.
+- An order is not a payment. A mandate order awaiting authorisation is
+  `authorisation_required` / `awaiting_authorisation`, never `charged`, and
+  only a signature-verified webhook may register a mandate or settle a payment.
 - Charges are idempotent, enforced by a unique constraint inside the charge
   transaction.
 - Commit changes when needed, help me to keep track of changes you did.
@@ -34,7 +37,8 @@ apps/
   api/            everything that runs: catalog, quotes, policy, ledger,
                   payments, mandates, approvals, webhooks, HTTP, MCP,
                   plus src/db/migrations and the whole test suite
-  web/            dashboard: /security (the attack log), /ledger, /mandates
+  web/            dashboard: /security (the attack log), /ledger, /mandates,
+                  plus /authorise/[orderRef], the one page a payer sees
 packages/
   shared/         types only, no runtime code. Imported by both apps as
                   @storefront/shared, always with `import type`.
@@ -68,5 +72,6 @@ pnpm test:adversarial  the attack grid, writes data/adversarial-results.json
 pnpm typecheck         every package
 pnpm build             every package
 pnpm verify:ledger     walk the hash chain
+pnpm reclaim           release headroom held by payments that never happened
 pnpm mcp               the MCP server over stdio
 ```

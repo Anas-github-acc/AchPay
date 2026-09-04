@@ -4,7 +4,7 @@ import type { Db } from '../db/pool.js';
 import { append } from '../ledger/ledger.js';
 import { getPayment, settlePayment } from '../payments/repo.js';
 import type { PaymentRecord } from '../payments/repo.js';
-import { rebookUsed, releaseUsed } from '../mandates/repo.js';
+import { rebookUsed, releaseUsed, setProviderToken } from '../mandates/repo.js';
 import type { ChargeStatus } from '../payments/types.js';
 
 const UNIQUE_VIOLATION = '23505';
@@ -34,6 +34,11 @@ interface ParsedEvent {
   orderRef: string | null;
   paymentRef: string | null;
   amountPaise: number | null;
+  /**
+   * The mandate token minted when a customer authorises. Present only on the
+   * authorising payment, and only for a payment that registered a mandate.
+   */
+  tokenRef: string | null;
 }
 
 /**
@@ -80,6 +85,15 @@ export async function processWebhook(delivery: WebhookDelivery): Promise<Webhook
       //     actually moved the row — a redelivery adjusts nothing.
       const adjustment = payment && settled ? await reconcileMandate(payment, settled.status, tx) : undefined;
 
+      // 2c. Register the mandate, if this delivery is the authorisation.
+      //
+      //     The token is bound to a mandate through the order, never through
+      //     anything in the event body: `payment` is the row this storefront
+      //     itself opened for that order_ref, so a token arriving on an order
+      //     we did not create has no mandate to attach to and is recorded
+      //     without being stored.
+      const registration = await registerToken(parsed, payment, terminal, tx);
+
       // 3. Append the row. Every delivery that gets this far leaves a trace,
       //    including ones we could not match, because "a webhook arrived for an
       //    order we do not know" is exactly what an auditor needs to see.
@@ -101,6 +115,7 @@ export async function processWebhook(delivery: WebhookDelivery): Promise<Webhook
             status: settled?.status ?? payment?.status ?? null,
             applied: Boolean(settled),
             ...(adjustment ?? {}),
+            ...(registration ?? {}),
             ...(payment && terminal && !settled
               ? { note: `payment already ${payment.status}; not reapplied` }
               : {}),
@@ -134,6 +149,67 @@ export async function processWebhook(delivery: WebhookDelivery): Promise<Webhook
     // is traceable to the event it duplicates.
     return { status: 'duplicate', event_id: eventId, ledger_seq: await seqOf(eventId) };
   }
+}
+
+/**
+ * Stores the provider token from an authorising payment.
+ *
+ * Three things have to hold, and each is a separate refusal:
+ *
+ *   - the event has to carry a token at all. Most do not;
+ *   - it has to name an order this storefront opened. `payment` is that
+ *     binding — it was written by checkout against a mandate id, so a token
+ *     arriving for someone else's order, or a fabricated order_id, matches no
+ *     row and is recorded rather than stored;
+ *   - the payment must not have failed. A declined authorisation registers
+ *     nothing, whatever else the body contains.
+ *
+ * Idempotent through setProviderToken, which writes only into a null column or
+ * over the identical token. A redelivery therefore stores nothing the first
+ * delivery did not, and a second, different token is refused outright rather
+ * than silently rebinding the mandate.
+ */
+async function registerToken(
+  parsed: ParsedEvent,
+  payment: PaymentRecord | undefined,
+  terminal: Exclude<ChargeStatus, 'created'> | undefined,
+  db: Db,
+): Promise<Record<string, unknown> | undefined> {
+  if (!parsed.tokenRef) return undefined;
+
+  if (!payment) {
+    return {
+      token_ref: parsed.tokenRef,
+      token_stored: false,
+      token_note: 'no payment matches this order; token not attached to any mandate',
+    };
+  }
+
+  if (terminal === 'failed') {
+    return {
+      token_ref: parsed.tokenRef,
+      token_stored: false,
+      token_note: 'authorisation failed; mandate not registered',
+    };
+  }
+
+  const mandate = await setProviderToken(payment.mandate_id, parsed.tokenRef, db);
+
+  // No row came back: the mandate already holds a different token. Refusing is
+  // the whole point — rebinding it would repoint every future debit.
+  if (!mandate) {
+    return {
+      token_ref: parsed.tokenRef,
+      token_stored: false,
+      token_note: 'mandate already registered with a different token',
+    };
+  }
+
+  return {
+    token_ref: parsed.tokenRef,
+    token_stored: true,
+    mandate_registered: mandate.id,
+  };
 }
 
 /**
@@ -200,11 +276,13 @@ function parse(body: Buffer): ParsedEvent | undefined {
   const orderId = entity?.order_id;
   const paymentId = entity?.id;
   const amount = entity?.amount;
+  const tokenId = entity?.token_id;
 
   return {
     event: envelope.event,
     orderRef: typeof orderId === 'string' ? orderId : null,
     paymentRef: typeof paymentId === 'string' ? paymentId : null,
     amountPaise: Number.isSafeInteger(amount) ? (amount as number) : null,
+    tokenRef: typeof tokenId === 'string' && tokenId.length > 0 ? tokenId : null,
   };
 }

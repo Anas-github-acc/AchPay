@@ -7,7 +7,7 @@ import { QuoteService, InvalidQuoteRequestError } from '../quotes/service.js';
 import { QuoteStore } from '../quotes/store.js';
 import { redis } from '../redis.js';
 import { pool } from '../db/pool.js';
-import { readAll, verifyChain } from '../ledger/ledger.js';
+import { readAll, readByOrderRef, verifyChain } from '../ledger/ledger.js';
 import { checkout } from '../checkout/checkout.js';
 import { webhookRoutes } from './webhook-route.js';
 import { approvalRoutes } from './approval-routes.js';
@@ -236,6 +236,46 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   /**
+   * What the mandate-authorisation page needs to open Razorpay Checkout.
+   *
+   * Read-only, and it authorises nothing: it hands back the order the
+   * storefront already created, plus the publishable key id that Razorpay's
+   * own script requires. The secret key never leaves the server, and this
+   * route cannot move a payment, register a mandate or alter a reservation —
+   * only a signature-verified webhook does any of that.
+   *
+   * The order_ref is the capability, exactly as an approval token is: it is
+   * provider-generated and unguessable, and knowing one reveals only the
+   * basket the payer is about to authorise.
+   */
+  app.get('/authorise/:order_ref', async (request, reply) => {
+    const { order_ref } = request.params as { order_ref: string };
+    const payment = await getPayment(order_ref);
+    if (!payment) return reply.code(404).send({ error: 'PAYMENT_NOT_FOUND', order_ref });
+
+    const mandate = await getMandate(payment.mandate_id);
+    const lines = await chargeLines(order_ref);
+
+    return {
+      order_ref: payment.order_ref,
+      status: payment.status,
+      amount_paise: payment.amount_paise,
+      currency: 'INR',
+      quote_id: payment.quote_id,
+      mandate_id: payment.mandate_id,
+      /** Publishable by design; Razorpay's browser script takes it as input. */
+      key_id: config.razorpay.keyId ?? null,
+      customer_id: payment.provider_customer_id,
+      /** Already registered, so this page has nothing left to do. */
+      mandate_registered: Boolean(mandate?.provider_token),
+      /** The ceiling the customer is authorising, not just this basket. */
+      mandate_max_amount_paise: mandate?.max_amount_paise ?? null,
+      lines,
+      merchant_name: config.merchant.name,
+    };
+  });
+
+  /**
    * The adversarial suite's last run, joined to the hand-written attack catalog.
    * Read by the dashboard's security page; nothing in the system depends on it.
    */
@@ -267,4 +307,18 @@ declare module 'fastify' {
     quoteStore: QuoteStore;
     adapter: PaymentAdapter;
   }
+}
+
+/**
+ * The basket, read back from the ledger row that recorded the order.
+ *
+ * The quote itself lives in Redis for two minutes and this page may be opened
+ * long after that, so the lines come from the hashed charge row instead —
+ * which is also the copy that cannot have been edited since.
+ */
+async function chargeLines(orderRef: string): Promise<unknown[]> {
+  const rows = await readByOrderRef(orderRef);
+  const charge = rows.find((row) => row.event_type === 'charge');
+  const lines = (charge?.payload as { lines?: unknown } | undefined)?.lines;
+  return Array.isArray(lines) ? lines : [];
 }

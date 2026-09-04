@@ -99,6 +99,11 @@ button {
 }
 button.approve { background: #106b3f; color: #fff; }
 button.reject { background: #fff; color: #a11a1a; border-color: #e4bcbc; }
+a.action {
+  display: block; text-align: center; text-decoration: none;
+  padding: 16px 12px; font-size: 1.05rem; font-weight: 600;
+  border-radius: 11px; background: #106b3f; color: #fff;
+}
 .banner { border-radius: 12px; padding: 16px 18px; margin-bottom: 16px;
           border: 1px solid; font-weight: 550; }
 .banner.ok { background: #e9f6ee; border-color: #b6ddc5; color: #0d5c36; }

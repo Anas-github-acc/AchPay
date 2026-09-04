@@ -142,6 +142,27 @@ export async function approvalRoutes(app: FastifyInstance, deps: CheckoutDeps): 
         );
       }
 
+      // The mandate has never been authorised, so approving the spend was only
+      // half of what this purchase needs. Not a failure: an order exists and
+      // the same person is already here, so send them on to authorise it. The
+      // token is still spent — the approval it carried has been given.
+      if (result.status === 'authorisation_required') {
+        await recordApprovalOutcome(claim.approval.token, { order_ref: result.order_ref });
+        return reply.send(
+          outcomePage(
+            {
+              tone: 'warn',
+              heading: `Approved — ${rupees(result.amount_paise)} needs authorisation`,
+              detail:
+                'Nothing has been charged yet. This mandate has not been authorised with the ' +
+                'payment provider, which is a one-time step. Open the link below to finish it.',
+              action: { label: 'Authorise the mandate', href: result.authorisation_url },
+            },
+            { ...claim.approval, order_ref: result.order_ref },
+          ),
+        );
+      }
+
       // Anything else means the purchase did not happen. The token is spent
       // either way: a link that can be redeemed a second time after a failure
       // is the worse failure mode, so this fails closed and the purchase has
@@ -243,7 +264,9 @@ function settledPage(approval: PendingApproval) {
   }
 }
 
-function describeFailure(result: Exclude<CheckoutResult, { status: 'charged' }>): string {
+function describeFailure(
+  result: Exclude<CheckoutResult, { status: 'charged' | 'authorisation_required' }>,
+): string {
   switch (result.status) {
     case 'denied':
       return `A spending rule refused it after approval (${result.rule_id}): ${result.reason}`;

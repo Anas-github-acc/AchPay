@@ -186,6 +186,15 @@ server.registerTool(
       'Every outcome is a normal result, so read the status field:',
       '- "charged": the payment was submitted. It settles asynchronously — call',
       '  get_order_status with the order_ref for the reconciled state.',
+      '- "authorisation_required": the user has never authorised this mandate with',
+      '  the payment provider, which is a one-time setup step. An order exists; a',
+      '  payment does not, and nothing has been charged. The reply carries',
+      '  authorisation_url for a person to open, and order_ref to poll with',
+      '  get_order_status. Like a gate, this is a hard stop you cannot pass: there is',
+      '  no tool, argument or retry that registers a mandate on the user\'s behalf,',
+      '  and an order id is not a payment — do not tell the user money has moved.',
+      '  Asking again with the same quote returns the same link rather than opening',
+      '  a second order. Once authorised, later purchases never come back here.',
       '- "denied": policy refused. rule_id and reason say which rule and why (a cap,',
       '  the velocity limit, a denylisted category, an exhausted or expired mandate).',
       '  Tell the user which rule fired. Do not retry, and do not try to split the',
@@ -240,7 +249,11 @@ server.registerTool(
       'from a "pending_approval" one. Pass whichever you were given.',
       '',
       'For an order_ref: amount in paise, the mandate and quote it came from, and a',
-      'status of created, captured or failed. "created" means submitted but not yet',
+      'status of awaiting_authorisation, created, captured, failed or abandoned.',
+      '"awaiting_authorisation" means the mandate is not registered yet and nobody',
+      'has been charged — a person still has to open the authorisation link.',
+      '"abandoned" means nobody ever did, and the reservation has been released.',
+      '"created" means submitted but not yet',
       'settled — the storefront only marks a payment captured when the provider\'s',
       'webhook says so, not when the API call returned. So a freshly charged order',
       'reads "created" for a moment. Poll a few times with a pause rather than in a',
@@ -291,7 +304,8 @@ server.registerTool(
       'when it happened. Use this for "what did you buy?" or "what did I spend?".',
       '',
       'What it will not do: it shows submitted charges only — not denials, not gated',
-      'attempts, and not payments the rail rejected outright. It never modifies',
+      'attempts, not mandates still waiting to be authorised, and not payments the',
+      'rail rejected outright. It never modifies',
       'anything: the ledger is append-only, so nothing here can',
       'edit or remove a past entry. It is also not a settlement report; for whether a',
       'specific payment finally captured, use get_order_status.',
@@ -318,9 +332,12 @@ server.registerTool(
     const receipts = rows
       .filter((row) => {
         const l = row as { event_type?: string; payload?: { status?: string } };
-        // A charge the rail refused is not a receipt; get_order_status is the
-        // place to ask about one payment's fate.
-        return l.event_type === 'charge' && l.payload?.status !== 'failed';
+        // A receipt is a charge that was actually submitted. A charge the rail
+        // refused is not one, and neither is a mandate order still waiting on
+        // a human — nothing has been bought yet. get_order_status is the place
+        // to ask about either.
+        const status = l.payload?.status;
+        return l.event_type === 'charge' && (status === 'created' || status === 'captured');
       })
       .slice(-take)
       .reverse()

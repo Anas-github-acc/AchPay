@@ -346,13 +346,94 @@ Subscribe to `payment.captured` and `payment.failed` in Dashboard → Settings �
 | Complete a test payment | webhook lands, ledger status goes `created` → `captured` |
 | Replay the same webhook via ngrok | no duplicate ledger row |
 | Send a webhook with a wrong signature | 400, nothing written |
-| Fail a payment with the failure handle | ledger records `failed`, `used_paise` unchanged |
+| Fail a payment with the failure handle | ledger records `failed`, `used_paise` released back |
 
 The replay test is the one that matters. Razorpay genuinely does redeliver, and a ledger that double-counts on redelivery is a broken audit trail.
 
 ### Done when
 
 Your ledger's payment statuses come from webhooks, not from API responses, and replaying a webhook changes nothing.
+
+---
+
+## Mandate registration — how this ended up differing from the plan
+
+The plan above treats a mandate order as a charge: create it, record it, wait
+for a webhook. Building it revealed that an order and a payment are not the
+same thing, and collapsing them was the source of three separate problems.
+
+**A mandate order is a request for a payment.** Razorpay's registration order
+sits at `attempts: 0` until a person authorises it in their UPI or card flow.
+Reporting that as a charge let an agent tell a user money had moved on the
+strength of an order id. `authorisation_required` is now a first-class
+checkout result, and `awaiting_authorisation` a first-class payment status.
+
+**Nobody authorising it sends no webhook at all.** Not captured, not failed —
+nothing. The reservation `checkout` takes at submission therefore had no way
+back, so headroom leaked permanently. Two things fix it: `payment.failed`
+releases the reservation (a later capture re-books it), and a sweep asks the
+provider about anything unsettled after fifteen minutes, releasing only what
+the provider confirms was never attempted. Payments gained an `abandoned`
+status, kept distinct from `failed`, because the rail declining and the rail
+never being asked are different facts. `pnpm reclaim` runs the sweep on demand.
+
+**Registration had no landing point.** The token minted when a customer
+authorises arrives on the webhook as `payload.payment.entity.token_id`, and
+nothing read it. It is now extracted and stored with `setProviderToken`, bound
+to a mandate through the payment row the storefront itself opened for that
+order — never through anything in the event body, so a token for an order we
+did not create has no mandate to attach to. `setProviderToken` writes only
+into a null column or over the identical token, which makes a redelivery a
+no-op and a second, different token a refusal rather than a silent rebind.
+
+The end-to-end shape:
+
+```
+first checkout        provider_token is null
+                      -> mandate order, no payment
+                      -> authorisation_required + authorisation_url
+                      -> reservation taken, payment awaiting_authorisation
+
+person authorises     apps/web /authorise/[orderRef], Razorpay Checkout
+
+webhook               token_id extracted -> setProviderToken
+                      payment.captured   -> payment captured
+
+later checkouts       provider_token exists
+                      -> debitRegisteredMandate, no human
+```
+
+The authorisation page lives in `apps/web` and is served from `PUBLIC_WEB_URL`.
+`apps/api/scripts/autopay-test.ts` still stands up its own server on :8082 and
+is still useful for debugging the raw Razorpay flow against a card, but no
+application path depends on it any more.
+
+### Local webhook testing
+
+Webhooks need a public HTTPS origin, and the authorisation link needs one the
+payer's browser can open. Neither is hard-coded anywhere; both come from env.
+
+```
+ngrok http 3000                     # the API
+ngrok http 3001                     # the dashboard, for the authorisation page
+```
+
+Then in `.env`, from the forwarding URLs ngrok prints:
+
+```
+PUBLIC_BASE_URL=https://<api-id>.ngrok.app
+PUBLIC_WEB_URL=https://<web-id>.ngrok.app
+```
+
+Restart the API. In Dashboard → Settings → Webhooks, point the endpoint at
+`https://<api-id>.ngrok.app/webhooks/razorpay` and subscribe to
+`payment.authorized`, `payment.captured` and `payment.failed` —
+`payment.authorized` is the one that carries the token for a mandate that
+registers without capturing in the same step.
+
+`localhost:4040` is ngrok's inspector: it shows every delivery and replays
+them, which is far faster than triggering real payments to test the replay
+path.
 
 ---
 

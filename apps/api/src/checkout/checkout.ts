@@ -13,6 +13,7 @@ import type { QuoteService } from '../quotes/service.js';
 import type { QuoteStore } from '../quotes/store.js';
 import type { SignedQuote } from '../quotes/types.js';
 import { approvalUrl, openApproval } from '../approvals/repo.js';
+import { authorisationUrl } from '../payments/authorisation.js';
 import type { PendingApproval } from '../approvals/types.js';
 import { idempotencyKey } from './idempotency.js';
 import type { CheckoutRequest, CheckoutResult } from './types.js';
@@ -35,6 +36,11 @@ export interface CheckoutDeps {
  *   5. append the decision to the ledger, whatever it is
  *   6. charge only on allow
  *   7. increment used_paise, record the charge, store the idempotent result
+ *
+ * Step 6 has one outcome that is neither success nor failure: the first charge
+ * on a mandate the provider has never seen authorised comes back as
+ * `authorisation_required`, with an order but no payment. That is a real
+ * result, not an error — see the branch below.
  *
  * Steps 2 through 7 are one Postgres transaction. The idempotency key is
  * claimed by inserting its primary key *before* any money moves, so a second
@@ -234,6 +240,86 @@ async function runCharge(tx: pg.PoolClient, ctx: ChargeContext): Promise<Checkou
     idempotencyKey: key,
     note: `quote ${quote.quote_id}`,
   });
+
+  if (charged.status === 'authorisation_required') {
+    // An order exists and a person has to authorise it. Everything below is
+    // deliberately the same as the charged path except what it is called and
+    // what the payment row says:
+    //
+    //  - the reservation is taken, because an authorised mandate order really
+    //    does debit this amount, and a second checkout must not be able to
+    //    spend it twice while this one waits;
+    //  - the idempotency key is kept, so asking again returns this same
+    //    authorisation link rather than opening a second mandate order —
+    //    the same property a gated quote has;
+    //  - the payment is 'awaiting_authorisation', never 'created', because
+    //    nothing has been submitted to the rail.
+    //
+    // If nobody ever authorises it, no webhook will ever arrive. The reclaim
+    // sweep is what gives the reservation back. See payments/reclaim.ts.
+    const reserved = await incrementUsed(mandateId, total, tx);
+    if (!reserved) {
+      throw new Error(
+        `Mandate ${mandateId} could not absorb ${total} paise; rolling back the authorisation`,
+      );
+    }
+
+    await recordCharge(
+      {
+        order_ref: charged.ref,
+        mandate_id: mandateId,
+        quote_id: quote.quote_id,
+        amount_paise: total,
+        adapter: adapter.name,
+        status: 'awaiting_authorisation',
+        provider_customer_id: charged.provider_customer_id ?? null,
+      },
+      tx,
+    );
+
+    const authRow = await append(
+      {
+        actor: 'system',
+        event_type: 'charge',
+        quote_id: quote.quote_id,
+        amount_paise: total,
+        razorpay_ref: charged.ref,
+        payload: {
+          mandate_id: mandateId,
+          status: 'awaiting_authorisation',
+          adapter: adapter.name,
+          idempotency_key: key,
+          authorisation_url: authorisationUrl(charged.ref),
+          lines: quote.lines.map((line) => ({
+            sku: line.sku,
+            title: line.title,
+            qty: line.qty,
+            unit_price_paise: line.unit_price_paise,
+            line_total_paise: line.line_total_paise,
+          })),
+          ...(approval ? { approval_token: approval.token } : {}),
+        },
+      },
+      tx,
+    );
+
+    const pendingResult: CheckoutResult = {
+      status: 'authorisation_required',
+      quote_id: quote.quote_id,
+      mandate_id: mandateId,
+      amount_paise: total,
+      rule_id: decision.rule_id,
+      order_ref: charged.ref,
+      authorisation_url: authorisationUrl(charged.ref),
+      ledger_seq: authRow.seq,
+    };
+
+    await tx.query('update idempotency set result = $2 where key = $1', [
+      key,
+      JSON.stringify(pendingResult),
+    ]);
+    return pendingResult;
+  }
 
   if (charged.status === 'failed') {
     const failureRow = await append(

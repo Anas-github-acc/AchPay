@@ -157,14 +157,31 @@ export async function rebookUsed(
   return rows[0] ? toMandate(rows[0]) : undefined;
 }
 
-/** Records the registered mandate token once authorisation has completed. */
+/**
+ * Records the registered mandate token once authorisation has completed.
+ *
+ * Write-once, and idempotent on the token it already holds. Razorpay
+ * redelivers webhooks as a matter of course, so the same token arrives more
+ * than once and must not be treated as a change; a *different* token arriving
+ * is a different matter entirely — it would mean some other authorisation is
+ * being bound to this mandate, and the right answer to that is to refuse and
+ * let the caller see that nothing moved.
+ *
+ * Returns undefined when nothing was written, which the caller records rather
+ * than treating as success.
+ */
 export async function setProviderToken(
   id: string,
   token: string,
   db: Db = pool,
 ): Promise<MandateRecord | undefined> {
+  if (!token) throw new Error('token is required');
   const { rows } = await db.query<RawMandate>(
-    'update mandates set provider_token = $2 where id = $1 returning *',
+    `update mandates
+        set provider_token = $2
+      where id = $1
+        and (provider_token is null or provider_token = $2)
+      returning *`,
     [id, token],
   );
   return rows[0] ? toMandate(rows[0]) : undefined;

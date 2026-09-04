@@ -28,6 +28,24 @@ export type CheckoutResult =
       charge_status: 'created';
       ledger_seq: number;
     })
+  | (Base & {
+      status: 'authorisation_required';
+      amount_paise: number;
+      rule_id: RuleId;
+      /**
+       * The provider has an order; it has no payment, and cannot have one
+       * until a person authorises this mandate. Nothing has been charged and
+       * nothing the agent can send will change that — the only way forward is
+       * a human opening authorisation_url, exactly as with an approval gate.
+       *
+       * It happens once per mandate. Once the authorising webhook stores the
+       * provider token, later checkouts debit the registered mandate and never
+       * come back here.
+       */
+      order_ref: string;
+      authorisation_url: string;
+      ledger_seq: number;
+    })
   | (Base & { status: 'denied'; rule_id: RuleId; reason: string; ledger_seq: number })
   | (Base & {
       status: 'pending_approval';

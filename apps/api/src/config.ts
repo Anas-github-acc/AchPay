@@ -66,6 +66,18 @@ function approvalTtlSeconds(): number {
 }
 
 /**
+ * Where the dashboard is served from.
+ *
+ * The mandate-authorisation page lives in apps/web, not in the API, so the
+ * link handed to an agent has to point at that origin. Separate from
+ * publicBaseUrl because the two are genuinely different services and, behind
+ * ngrok, genuinely different hostnames.
+ */
+function publicWebUrl(): string {
+  return (process.env.PUBLIC_WEB_URL ?? 'http://localhost:3001').replace(/\/+$/, '');
+}
+
+/**
  * Merchant identity, as it appears in the ACP product feed. Env-overridable so
  * a deployment does not have to fork the code to put its own name on the feed.
  */
@@ -81,6 +93,8 @@ export const config = {
   port,
   merchant,
   publicBaseUrl: publicBaseUrl(),
+  /** Origin of the dashboard, where the mandate-authorisation page lives. */
+  publicWebUrl: publicWebUrl(),
   /** How long a human has to act on a gated purchase before the token dies. */
   approvalTtlSeconds: approvalTtlSeconds(),
   /** Tests get their own database so a run never clobbers dev data. */

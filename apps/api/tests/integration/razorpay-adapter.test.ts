@@ -95,7 +95,11 @@ describe('RazorpayMandateAdapter against a real database', () => {
       deps(adapter),
     );
 
-    expect(result).toMatchObject({ status: 'charged', amount_paise: 4_000 });
+    // The mandate has no provider token, so the first charge opens a mandate
+    // order and asks for authorisation. The reservation is still taken: an
+    // authorised order debits this amount, and a second checkout must not be
+    // able to spend it while this one waits.
+    expect(result).toMatchObject({ status: 'authorisation_required', amount_paise: 4_000 });
     expect(orders).toHaveLength(1);
     expect(orders[0]!.amount).toBe(4_000);
     expect((await getMandate(mandate.id))!.used_paise).toBe(4_000);
@@ -116,7 +120,7 @@ describe('RazorpayMandateAdapter against a real database', () => {
         { quote_id: quote.quote_id, mandate_id: mandate.id },
         deps(adapter),
       );
-      expect(result.status).toBe('charged');
+      expect(result.status).toBe('authorisation_required');
     }
 
     const { rows } = await pool.query(
@@ -144,7 +148,7 @@ describe('RazorpayMandateAdapter against a real database', () => {
       quotes.map((q) => checkout({ quote_id: q.quote_id, mandate_id: mandate.id }, deps(adapter))),
     );
 
-    expect(results.every((r) => r.status === 'charged')).toBe(true);
+    expect(results.every((r) => r.status === 'authorisation_required')).toBe(true);
     // Racing charges may each create a customer upstream, but exactly one id
     // is remembered, and from then on every charge agrees on it.
     const { rows } = await pool.query(

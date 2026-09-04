@@ -61,7 +61,7 @@ async function main(): Promise<void> {
     name: 'Autopay Demo',
     email: `${userRef}@example.com`,
     contact: '9123456780',
-    fail_existing: 0,
+    fail_existing: '0',
   });
   if (!customer.json.id) throw new Error(`customer failed: ${JSON.stringify(customer.json)}`);
 

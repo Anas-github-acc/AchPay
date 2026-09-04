@@ -5,6 +5,7 @@ import type { ChargeStatus } from './types.js';
 export interface PaymentRecord {
   order_ref: string;
   payment_ref: string | null;
+  provider_customer_id: string | null;
   mandate_id: string;
   quote_id: string | null;
   amount_paise: number;
@@ -26,6 +27,14 @@ export interface RecordChargeInput {
   quote_id: string | null;
   amount_paise: number;
   adapter: string;
+  /**
+   * 'created' for a submitted charge, 'awaiting_authorisation' for a mandate
+   * order still waiting on a person. Never anything terminal: only a webhook
+   * or reconciliation may write those.
+   */
+  status?: Extract<ChargeStatus, 'created' | 'awaiting_authorisation'>;
+  /** The provider customer the order belongs to, when the adapter knows it. */
+  provider_customer_id?: string | null;
 }
 
 /**
@@ -44,10 +53,19 @@ export async function recordCharge(
 ): Promise<void> {
   await db.query(
     `insert into payments
-       (order_ref, mandate_id, quote_id, amount_paise, status, adapter)
-     values ($1, $2, $3, $4, 'created', $5)
+       (order_ref, mandate_id, quote_id, amount_paise, status, adapter,
+        provider_customer_id)
+     values ($1, $2, $3, $4, $5, $6, $7)
      on conflict (order_ref) do nothing`,
-    [input.order_ref, input.mandate_id, input.quote_id, input.amount_paise, input.adapter],
+    [
+      input.order_ref,
+      input.mandate_id,
+      input.quote_id,
+      input.amount_paise,
+      input.status ?? 'created',
+      input.adapter,
+      input.provider_customer_id ?? null,
+    ],
   );
 }
 
@@ -93,10 +111,11 @@ export async function settlePayment(
       ? // A capture supersedes anything short of a capture, including an
         // abandonment: reconciliation can only ever have been working from
         // what the provider knew at the time it was asked.
-        ['created', 'failed', 'abandoned']
-      : status === 'abandoned'
-        ? ['created']
-        : ['created'];
+        ['awaiting_authorisation', 'created', 'failed', 'abandoned']
+      : // A mandate order can fail or be abandoned without ever being
+        // submitted, so both terminal-but-not-captured moves start from either
+        // unsettled state.
+        ['awaiting_authorisation', 'created'];
   const { rows } = await db.query<RawPayment>(
     `update payments
         set status = $2, payment_ref = coalesce($3, payment_ref), updated_at = now()
@@ -109,7 +128,11 @@ export async function settlePayment(
 }
 
 /**
- * Payments still holding a reservation long after they were submitted.
+ * Payments still holding a reservation long after they were opened.
+ *
+ * Both unsettled states qualify. A mandate order nobody authorised is the
+ * commonest case by far, and it is the one that never produces a webhook of
+ * any kind.
  *
  * These are the rows the reclaim sweep asks the provider about. Ordered oldest
  * first so a sweep that hits its limit makes progress on the worst offenders
@@ -125,7 +148,7 @@ export async function staleReservations(
   }
   const { rows } = await db.query<RawPayment>(
     `select * from payments
-      where status = 'created'
+      where status in ('awaiting_authorisation', 'created')
         and created_at < now() - make_interval(secs => $1)
       order by created_at asc
       limit $2`,

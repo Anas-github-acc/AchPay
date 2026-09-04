@@ -116,7 +116,13 @@ async function countPayments(): Promise<number> {
 describe('approval gate', () => {
   beforeEach(async () => {
     await resetAll();
-    app = await buildApp({ logger: false });
+    // The rail is pinned rather than read from PAYMENT_ADAPTER. These cases
+    // are about the HTTP and approval paths, not about which provider is
+    // configured, and against the real Razorpay adapter a mandate with no
+    // provider token now answers 'authorisation_required' — correctly, but it
+    // makes the outcome depend on a developer's .env rather than on the code
+    // under test. Mandate registration has its own suite.
+    app = await buildApp({ logger: false, adapter: new FakeAdapter() });
     await app.ready();
   });
 

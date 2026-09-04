@@ -105,12 +105,20 @@ describe('RazorpayMandateAdapter', () => {
 
     const result = await adapter.charge(chargeReq());
 
-    expect(result).toMatchObject({ ref: 'order_TEST1', status: 'created' });
+    // Not 'created': an order is a request for a payment, and this mandate has
+    // never been authorised. checkout turns this into an authorisation link.
+    expect(result).toMatchObject({
+      ref: 'order_TEST1',
+      status: 'authorisation_required',
+      provider_customer_id: 'cust_TESTCUSTOMER01',
+    });
 
     expect(customers).toHaveLength(1);
     // A contact is required: Razorpay rejects recurring orders without one, and
     // a customer with no phone cannot be debited automatically later.
-    expect(customers[0]).toMatchObject({ name: 'user_test', fail_existing: 0 });
+    // The string '0', not the number: the API rejects the numeric form with
+    // the very error the flag exists to avoid.
+    expect(customers[0]).toMatchObject({ name: 'user_test', fail_existing: '0' });
     expect(customers[0]!.contact).toBeTruthy();
     expect(customers[0]!.email).toBeTruthy();
 
@@ -284,6 +292,8 @@ describe('RazorpayMandateAdapter', () => {
       }),
     );
 
+    // A registered mandate really was submitted to the rail, so this one is
+    // 'created' — the distinction the authorisation state exists to make.
     expect(result).toMatchObject({ ref: 'pay_TESTPAYMENT01', status: 'created' });
     expect(orders[0]).not.toHaveProperty('token');
     expect(recurring[0]).toMatchObject({

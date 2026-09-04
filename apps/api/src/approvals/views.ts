@@ -80,6 +80,13 @@ export interface OutcomeBanner {
   tone: 'ok' | 'bad' | 'warn';
   heading: string;
   detail?: string;
+  /**
+   * A next step the person has to take, rendered as a button.
+   *
+   * Only ever a URL this server built — never one that arrived in a request —
+   * for the same reason the approval link itself is built from configuration.
+   */
+  action?: { label: string; href: string };
 }
 
 /**
@@ -93,6 +100,11 @@ export function outcomePage(
   extra: [string, string][] = [],
 ): string {
   const detail = banner.detail ? `<div class="detail">${esc(banner.detail)}</div>` : '';
+  const action = banner.action
+    ? `<div class="card"><a class="action" href="${esc(banner.action.href)}">${esc(
+        banner.action.label,
+      )}</a></div>`
+    : '';
   const basket = approval
     ? `<div class="card">
   <h2>The purchase</h2>
@@ -118,6 +130,7 @@ export function outcomePage(
   return layout(
     banner.heading,
     `<div class="banner ${esc(banner.tone)}">${esc(banner.heading)}${detail}</div>
+${action}
 ${basket}
 ${details}
 <footer>${LEDGER_FOOTER}</footer>`,

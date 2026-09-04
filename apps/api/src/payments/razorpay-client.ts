@@ -20,8 +20,15 @@ export interface CustomerCreateBody {
   name: string;
   email?: string;
   contact?: string;
-  /** 0 returns the existing customer instead of erroring on a repeat. */
-  fail_existing: 0 | 1;
+  /**
+   * '0' returns the existing customer instead of erroring on a repeat.
+   *
+   * A string, and it has to be. The API rejects the numeric 0 outright with
+   * "Customer already exists for the merchant" — the same error the flag is
+   * there to prevent — so a returning customer whose id this storefront has
+   * not cached locally could never be charged again.
+   */
+  fail_existing: '0' | '1';
   notes?: Record<string, string>;
 }
 

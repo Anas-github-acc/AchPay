@@ -383,6 +383,52 @@ a {
   border-color: var(--border);
 }
 
+/* --- mandate authorisation ------------------------------------------------
+   The one page a payer sees. Deliberately plain: it is read once, on a phone,
+   by someone deciding whether to hand an agent a spending limit. */
+
+.authorise-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.card--ok {
+  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
+  background: color-mix(in srgb, var(--success) 6%, var(--bg-secondary));
+}
+
+.card--bad {
+  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
+  background: color-mix(in srgb, var(--danger) 6%, var(--bg-secondary));
+}
+
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 2px solid var(--text-primary);
+}
+
+.detail-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+
+.detail-list dt {
+  color: var(--text-muted);
+  font-size: var(--text-13);
+}
+
+.detail-list dd {
+  margin: 0;
+  font-size: var(--text-13);
+  word-break: break-all;
+}
+
 .error-banner {
   border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
   border-left: 3px solid var(--danger);
