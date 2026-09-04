@@ -143,7 +143,9 @@ export async function processWebhook(delivery: WebhookDelivery): Promise<Webhook
  *   created -> failed:    the booking was for a payment that never happened,
  *                         so give the headroom back.
  *   failed  -> captured:  a retry on the same order succeeded after we had
- *                         already released it. Book it again.
+ *                         already released it. Book it again. Same for a
+ *                         capture landing on an order the sweep had already
+ *                         called abandoned — the provider's later word wins.
  *   created -> captured:  the booking was right the first time. Nothing to do.
  *
  * The prior status comes from the row read before settlePayment ran, which is
@@ -161,7 +163,7 @@ async function reconcileMandate(
       mandate_used_paise: mandate?.used_paise ?? null,
     };
   }
-  if (after === 'captured' && before.status === 'failed') {
+  if (after === 'captured' && (before.status === 'failed' || before.status === 'abandoned')) {
     const mandate = await rebookUsed(before.mandate_id, before.amount_paise, db);
     return {
       rebooked_paise: before.amount_paise,

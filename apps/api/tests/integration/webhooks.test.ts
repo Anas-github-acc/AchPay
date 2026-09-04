@@ -4,8 +4,8 @@ import { buildApp } from '../../src/http/app.js';
 import { checkout } from '../../src/checkout/checkout.js';
 import { pool } from '../../src/db/pool.js';
 import { verifyChain } from '../../src/ledger/ledger.js';
-import { createMandate, getMandate } from '../../src/mandates/repo.js';
-import { getPayment } from '../../src/payments/repo.js';
+import { createMandate, getMandate, releaseUsed } from '../../src/mandates/repo.js';
+import { getPayment, settlePayment } from '../../src/payments/repo.js';
 import { FakeAdapter } from '../../src/payments/fake.js';
 import { computeSignature } from '../../src/webhooks/signature.js';
 import type { SignedQuote } from '../../src/quotes/types.js';
@@ -256,6 +256,24 @@ describe('POST /webhooks/razorpay', () => {
 
     // The failure released the reservation; the capture has to book it again,
     // or the mandate ends up disagreeing with the bank about money that moved.
+    expect((await getMandate(mandateId))!.used_paise).toBe(4_000);
+  });
+
+  it('re-books the headroom when a capture lands on an abandoned order', async () => {
+    // The reclaim sweep marks an order abandoned on the provider's word that
+    // it was never attempted, and gives the reservation back. If a capture
+    // turns up afterwards the money moved, and the mandate has to agree with
+    // the bank rather than with the sweep's older information.
+    const { orderRef, mandateId } = await chargeOnce();
+    expect((await settlePayment(orderRef, 'abandoned', null))!.status).toBe('abandoned');
+    await releaseUsed(mandateId, 4_000);
+    expect((await getMandate(mandateId))!.used_paise).toBe(0);
+
+    const late = await deliver(event('payment.captured', orderRef, 4_000, 'pay_LATE'), {
+      eventId: 'evt_late_capture',
+    });
+
+    expect(late.json()).toMatchObject({ status: 'processed', payment_status: 'captured' });
     expect((await getMandate(mandateId))!.used_paise).toBe(4_000);
   });
 
