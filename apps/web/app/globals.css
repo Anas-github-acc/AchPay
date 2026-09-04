@@ -445,7 +445,9 @@ a {
 }
 
 .hero-lede {
+  font-family: "Inter", sans-serif;
   font-size: var(--text-21);
+  font-style: italic;
   color: var(--text-secondary);
   max-width: 34ch;
 }
@@ -1045,6 +1047,18 @@ a {
 .decision--gate,
 .decision--needs_approval {
   color: var(--warning-ink);
+}
+
+/* A gate a human cleared. Sits next to the GATE label rather than replacing
+   it: the engine really did gate, and the record should keep saying so. */
+.decision-note {
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-11, 11px);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--success-ink);
 }
 
 .decision--none {

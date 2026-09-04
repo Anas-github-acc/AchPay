@@ -158,6 +158,19 @@ async function runCharge(tx: pg.PoolClient, ctx: ChargeContext): Promise<Checkou
         reason: decision.reason,
         observed: decision.observed,
         idempotency_key: key,
+        // A gate a human has already cleared still evaluates to `gate` here:
+        // nothing about the basket changed, and the engine is pure, so it
+        // gives the same answer it gave the first time. The grant is recorded
+        // alongside that answer rather than folded into it, because without
+        // it these rows read as a gate followed immediately by a charge —
+        // which is exactly what a bypass looks like in an audit log.
+        ...(approval
+          ? {
+              authorised_by: 'human_approved',
+              approval_token: approval.token,
+              gate_seq: approval.gate_seq,
+            }
+          : {}),
       },
     },
     tx,

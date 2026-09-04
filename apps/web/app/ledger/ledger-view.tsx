@@ -7,6 +7,18 @@ import { formatPaise, formatTime } from '../../lib/format';
 
 const POLL_MS = 3000;
 
+/**
+ * A gate the approval page already cleared. The policy engine re-evaluates on
+ * the approved run and returns `gate` again — the amount did not change — so
+ * without this marker the row above the charge reads as an ignored gate.
+ */
+function authorisedByHuman(row: LedgerRow): boolean {
+  if (row.decision !== 'gate') return false;
+  const payload = row.payload as { authorised_by?: string } | null | undefined;
+  return payload?.authorised_by === 'human_approved';
+}
+
+
 interface LedgerResponse {
   rows: LedgerRow[];
   count: number;
@@ -122,6 +134,11 @@ export function LedgerView() {
                     <span className={`decision decision--${row.decision ?? 'none'}`}>
                       {row.decision ?? row.event_type}
                     </span>
+                    {authorisedByHuman(row) && (
+                      <span className="decision-note" title="A human approved this gate before it charged">
+                        cleared
+                      </span>
+                    )}
                   </td>
                   <td data-label="Rule" className="mono">{row.rule_id ?? <span className="dim">—</span>}</td>
                   <td data-label="Amount" className="amount">{formatPaise(row.amount_paise)}</td>
