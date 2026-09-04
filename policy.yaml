@@ -9,7 +9,7 @@
 per_txn_max_paise: 50000
 
 # Total allowed across a rolling 24 hours, in paise. 200000 paise = Rs 2000.
-daily_max_paise: 200000
+daily_max_paise: 500000
 
 # Most transactions permitted in any rolling 60 minutes.
 velocity_max_per_hour: 5
