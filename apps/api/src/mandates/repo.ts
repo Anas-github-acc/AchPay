@@ -36,6 +36,20 @@ export async function createMandate(
   return toMandate(rows[0]!);
 }
 
+/**
+ * Every mandate, newest first. A read for the dashboard, nothing else reads it.
+ *
+ * Headroom is not stored — it is `max_amount_paise - used_paise`, computed by
+ * the caller so there is exactly one place it can drift from.
+ */
+export async function listMandates(limit = 100, db: Db = pool): Promise<MandateRecord[]> {
+  const { rows } = await db.query<RawMandate>(
+    'select * from mandates order by created_at desc limit $1',
+    [limit],
+  );
+  return rows.map(toMandate);
+}
+
 export async function getMandate(id: string, db: Db = pool): Promise<MandateRecord | undefined> {
   const { rows } = await db.query<RawMandate>('select * from mandates where id = $1', [id]);
   return rows[0] ? toMandate(rows[0]) : undefined;

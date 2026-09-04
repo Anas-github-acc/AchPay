@@ -11,7 +11,9 @@ import { readAll, verifyChain } from '../ledger/ledger.js';
 import { checkout } from '../checkout/checkout.js';
 import { webhookRoutes } from './webhook-route.js';
 import { approvalRoutes } from './approval-routes.js';
-import { createMandate, getMandate, revokeMandate } from '../mandates/repo.js';
+import { createMandate, getMandate, listMandates, revokeMandate } from '../mandates/repo.js';
+import { buildProductFeed } from '../catalog/feed.js';
+import { getSecurityReport } from '../security/report.js';
 import { createAdapter } from '../payments/index.js';
 import type { PaymentAdapter } from '../payments/types.js';
 import { getPolicy } from '../policy/config.js';
@@ -94,6 +96,31 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     return toDetailView(product);
   });
 
+  /**
+   * The machine-readable catalog export, in Agentic Commerce Protocol shape.
+   *
+   * Spec version 2026-04-17 — the `ProductsResponse` envelope. Served at the
+   * conventional .well-known path so a buying agent can find it from the origin
+   * alone, with no prior arrangement with this merchant.
+   *
+   * Note what a feed reader cannot do with this file: there is no price in it
+   * that any endpoint here will accept back. Discovery and spending are
+   * separate surfaces, and the only handle on money is a quote_id.
+   */
+  app.get('/.well-known/product-feed.json', async (_request, reply) => {
+    const feed = buildProductFeed(catalog, {
+      baseUrl: config.publicBaseUrl,
+      sellerName: config.merchant.name,
+      sellerUrl: config.merchant.url,
+      privacyPolicyUrl: config.merchant.privacyPolicyUrl,
+      termsUrl: config.merchant.termsUrl,
+    });
+    return reply
+      .header('content-type', 'application/json; charset=utf-8')
+      .header('cache-control', 'public, max-age=300')
+      .send(feed);
+  });
+
   app.post('/quotes', async (request, reply) => {
     const body = request.body as { items?: QuoteRequestItem[] } | undefined;
     try {
@@ -146,6 +173,18 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     return reply.code(201).send(mandate);
   });
 
+  app.get('/mandates', async (request) => {
+    const { limit } = request.query as { limit?: string };
+    const mandates = await listMandates(limit ? Number(limit) : 100);
+    return {
+      mandates: mandates.map((m) => ({
+        ...m,
+        headroom_paise: m.max_amount_paise - m.used_paise,
+      })),
+      count: mandates.length,
+    };
+  });
+
   app.get('/mandates/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const mandate = await getMandate(id);
@@ -194,6 +233,21 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     const payment = await getPayment(order_ref);
     if (!payment) return reply.code(404).send({ error: 'PAYMENT_NOT_FOUND', order_ref });
     return payment;
+  });
+
+  /**
+   * The adversarial suite's last run, joined to the hand-written attack catalog.
+   * Read by the dashboard's security page; nothing in the system depends on it.
+   */
+  app.get('/security/report', async (_request, reply) => {
+    try {
+      return getSecurityReport();
+    } catch (err) {
+      return reply.code(503).send({
+        error: 'SECURITY_REPORT_UNAVAILABLE',
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
   });
 
   app.get('/ledger', async (request) => {

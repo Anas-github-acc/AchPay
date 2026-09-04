@@ -34,11 +34,11 @@ apps/
   api/            everything that runs: catalog, quotes, policy, ledger,
                   payments, mandates, approvals, webhooks, HTTP, MCP,
                   plus src/db/migrations and the whole test suite
-  web/            dashboard. Scaffold only so far.
+  web/            dashboard: /security (the attack log), /ledger, /mandates
 packages/
   shared/         types only, no runtime code. Imported by both apps as
                   @storefront/shared, always with `import type`.
-data/             catalog.json, and the reports the app writes
+data/             catalog.json, attack-catalog.json, and the reports the app writes
 policy.yaml       the spending policy
 .env              not committed; every script below runs from the repo root,
                   which is why this file stays here
@@ -46,8 +46,8 @@ policy.yaml       the spending policy
 
 `packages/shared` holds exactly the types both apps need: the ledger row and
 its event_type union, PolicyDecision and its rule_id union, Product, the quote
-and its lines, the mandate and its status, and the shape of
-data/adversarial-results.json. Anything with behaviour lives in apps/api, and
+and its lines, the mandate and its status, the shape of
+data/adversarial-results.json, and the attack log the dashboard reads. Anything with behaviour lives in apps/api, and
 each app-side types file re-exports its shared types so imports stay local to
 the code that uses them.
 

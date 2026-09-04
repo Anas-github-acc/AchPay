@@ -18,3 +18,11 @@ export type { Product, ProductSource, RawProduct } from './catalog.js';
 export type { QuoteLine, SignedQuote, UnsignedQuote } from './quote.js';
 export type { MandateRecord, MandateStatus } from './mandate.js';
 export type { AdversarialReport, AttackResult } from './adversarial.js';
+export type {
+  AttackCatalog,
+  AttackCatalogEntry,
+  DefenceLayer,
+  SecurityAttack,
+  SecurityReport,
+  Severity,
+} from './security.js';

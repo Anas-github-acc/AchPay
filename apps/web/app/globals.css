@@ -1,0 +1,820 @@
+/*
+ * One stylesheet, no framework.
+ *
+ * The design constraint for this dashboard is unusual: it is read from the back
+ * of a room, off a projector, by people who did not write it. That pushes every
+ * decision the same way — base type at 18px rather than 14, a 12-column grid
+ * traded for two or three wide columns, and colour used only where it carries
+ * meaning (a decision, a verdict) so that when something is green it means
+ * something.
+ *
+ * Projector contrast is worse than a monitor's, so the muted foreground is
+ * #A8B4C8 rather than the usual slate-400, and the decision colours are the
+ * lighter 300/400 tints: #EF4444 on near-black clears 4.5:1 by a hair on a good
+ * screen and fails on a beamer. #F87171 does not.
+ */
+
+:root {
+  --bg: #020617;
+  --bg-raised: #0e1223;
+  --bg-sunken: #010409;
+  --card: #0e1223;
+  --card-hover: #141a2e;
+  --border: #222c45;
+  --border-strong: #3a4763;
+
+  --fg: #f8fafc;
+  --fg-muted: #a8b4c8;
+  --fg-dim: #6f7d95;
+
+  --allow: #4ade80;
+  --allow-bg: rgba(74, 222, 128, 0.12);
+  --gate: #fbbf24;
+  --gate-bg: rgba(251, 191, 36, 0.12);
+  --deny: #f87171;
+  --deny-bg: rgba(248, 113, 113, 0.12);
+  --accent: #60a5fa;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  --radius: 10px;
+  --radius-lg: 16px;
+
+  --sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo,
+    Consolas, 'Liberation Mono', monospace;
+
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 18px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Never removed, only restyled. Keyboard is the only way to drive this on a
+   presenter remote. */
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------------------------------------------------------------- shell -- */
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  padding: var(--space-4) var(--space-7);
+  background: rgba(2, 6, 23, 0.92);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.brand .brand-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--allow);
+  box-shadow: 0 0 12px var(--allow);
+  flex: none;
+  align-self: center;
+}
+
+.nav {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.nav a {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  border: 1px solid transparent;
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+  cursor: pointer;
+}
+
+.nav a:hover {
+  color: var(--fg);
+  background: var(--card-hover);
+}
+
+.nav a[aria-current='page'] {
+  color: var(--fg);
+  background: var(--card);
+  border-color: var(--border-strong);
+}
+
+.page {
+  flex: 1;
+  padding: var(--space-7) var(--space-7) var(--space-8);
+  max-width: 1800px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+
+.page-head h1 {
+  font-size: clamp(32px, 3.4vw, 48px);
+}
+
+.page-head p {
+  margin: var(--space-2) 0 0;
+  color: var(--fg-muted);
+  font-size: 18px;
+  max-width: 70ch;
+}
+
+/* ----------------------------------------------------------- primitives -- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  letter-spacing: -0.01em;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 1px solid var(--border-strong);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 650;
+  color: var(--fg);
+  background: var(--card);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease;
+  min-height: 48px;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--card-hover);
+  border-color: var(--fg-dim);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.empty {
+  padding: var(--space-8);
+  text-align: center;
+  color: var(--fg-muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+
+.error-banner {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius);
+  border: 1px solid var(--deny);
+  background: var(--deny-bg);
+  color: var(--fg);
+  margin-bottom: var(--space-5);
+}
+
+/* --------------------------------------------------------- decisions ---- */
+
+.decision {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+
+.decision::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
+.decision--allow {
+  color: var(--allow);
+  background: var(--allow-bg);
+}
+
+.decision--gate {
+  color: var(--gate);
+  background: var(--gate-bg);
+}
+
+.decision--deny {
+  color: var(--deny);
+  background: var(--deny-bg);
+}
+
+.decision--none {
+  color: var(--fg-dim);
+  background: transparent;
+  border-style: dashed;
+}
+
+.decision--none::before {
+  display: none;
+}
+
+/* ------------------------------------------------------------- ledger --- */
+
+.ledger-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.chain-result {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius);
+  font-weight: 650;
+  font-size: 17px;
+  border: 1px solid currentColor;
+  min-height: 48px;
+}
+
+.chain-result--ok {
+  color: var(--allow);
+  background: var(--allow-bg);
+}
+
+.chain-result--broken {
+  color: var(--deny);
+  background: var(--deny-bg);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+}
+
+table.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 17px;
+  min-width: 1100px;
+}
+
+table.ledger th {
+  text-align: left;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-strong);
+  background: var(--bg-sunken);
+  position: sticky;
+  top: 0;
+}
+
+table.ledger td {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+table.ledger tbody tr:last-child td {
+  border-bottom: none;
+}
+
+table.ledger tbody tr:hover td {
+  background: var(--card-hover);
+}
+
+/* A thin left edge in the decision colour: readable from far enough back that
+   the badge text itself has stopped resolving. */
+tr.row--allow td:first-child {
+  box-shadow: inset 4px 0 0 var(--allow);
+}
+
+tr.row--gate td:first-child {
+  box-shadow: inset 4px 0 0 var(--gate);
+}
+
+tr.row--deny td:first-child {
+  box-shadow: inset 4px 0 0 var(--deny);
+}
+
+.amount {
+  font-family: var(--mono);
+  font-size: 18px;
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.intent {
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-muted);
+}
+
+.dim {
+  color: var(--fg-dim);
+}
+
+.live-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--allow);
+  display: inline-block;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+/* ----------------------------------------------------------- mandates --- */
+
+.mandate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: var(--space-5);
+}
+
+.mandate-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.mandate-card .user-ref {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.headroom-figure {
+  font-family: var(--mono);
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.headroom-of {
+  color: var(--fg-dim);
+  font-size: 16px;
+  margin-top: var(--space-1);
+}
+
+.meter {
+  height: 12px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  overflow: hidden;
+  margin: var(--space-4) 0 var(--space-3);
+}
+
+.meter > span {
+  display: block;
+  height: 100%;
+  background: var(--allow);
+}
+
+.meter--low > span {
+  background: var(--gate);
+}
+
+.meter--spent > span {
+  background: var(--deny);
+}
+
+.mandate-meta {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  color: var(--fg-muted);
+  font-size: 16px;
+}
+
+.status--active {
+  color: var(--allow);
+}
+
+.status--revoked,
+.status--expired {
+  color: var(--deny);
+}
+
+/* ----------------------------------------------------------- security --- */
+
+.scoreboard {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+  padding: var(--space-6) var(--space-7);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, #0f1528 0%, #0b0f1e 100%);
+  margin-bottom: var(--space-7);
+}
+
+.score {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 180px;
+}
+
+.score-figure {
+  font-size: clamp(56px, 7vw, 96px);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-label {
+  margin-top: var(--space-2);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+}
+
+.score--held .score-figure {
+  color: var(--allow);
+}
+
+.score--open .score-figure {
+  color: var(--deny);
+}
+
+.score-rule {
+  width: 1px;
+  background: var(--border-strong);
+  align-self: stretch;
+}
+
+.score-note {
+  flex: 1 1 320px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--fg-muted);
+  font-size: 17px;
+  min-width: 300px;
+}
+
+.layer {
+  margin-bottom: var(--space-8);
+}
+
+.layer-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-3);
+  border-bottom: 2px solid var(--border-strong);
+  margin-bottom: var(--space-5);
+}
+
+.layer-head h2 {
+  font-size: clamp(26px, 2.4vw, 34px);
+}
+
+.layer-head .layer-claim {
+  color: var(--fg-muted);
+  font-size: 17px;
+  flex: 1 1 400px;
+}
+
+.layer-head .layer-count {
+  color: var(--fg-dim);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.attack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: var(--space-5);
+}
+
+.attack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  border-left: 4px solid var(--allow);
+}
+
+.attack--open {
+  border-left-color: var(--deny);
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.07), var(--card) 55%);
+}
+
+.attack header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.attack h3 {
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.attack .attempts {
+  margin: 0;
+  color: var(--fg-muted);
+  font-size: 17px;
+}
+
+.verdict {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid currentColor;
+  white-space: nowrap;
+}
+
+.verdict--held {
+  color: var(--allow);
+  background: var(--allow-bg);
+}
+
+.verdict--open {
+  color: var(--deny);
+  background: var(--deny-bg);
+}
+
+.stopped-by {
+  margin: 0;
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  font-size: 17px;
+}
+
+.stopped-by .stopped-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: var(--space-2);
+}
+
+.attack-foot {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: auto;
+}
+
+.sev {
+  border-color: currentColor;
+}
+
+.sev--critical {
+  color: var(--deny);
+}
+
+.sev--high {
+  color: var(--gate);
+}
+
+.sev--medium {
+  color: var(--fg-muted);
+}
+
+.evidence {
+  color: var(--fg-dim);
+  font-size: 15px;
+  font-family: var(--mono);
+  line-height: 1.5;
+}
+
+/* --------------------------------------------------- continuous testing -- */
+
+/*
+ * Deliberately quieter than everything above it: no card borders in the
+ * decision palette, no green, reduced contrast, and a label that says "designed"
+ * in the heading itself. A reader who mistakes this for live results discounts
+ * the attack grid too, so the visual distance is the point.
+ */
+.forward {
+  margin-top: var(--space-8);
+  padding: var(--space-6) var(--space-7);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--fg-dim);
+}
+
+.forward h2 {
+  font-size: 24px;
+  font-weight: 650;
+  color: var(--fg-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.forward .not-running {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 2px var(--space-3);
+}
+
+.forward-body {
+  display: grid;
+  grid-template-columns: minmax(320px, 1.1fr) minmax(280px, 1fr);
+  gap: var(--space-7);
+  margin-top: var(--space-5);
+}
+
+.forward h3 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-dim);
+  margin-bottom: var(--space-3);
+}
+
+.forward ol {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--fg-muted);
+}
+
+.forward p {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--fg-muted);
+  max-width: 60ch;
+}
+
+.forward .status-line {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px dashed var(--border-strong);
+  font-size: 16px;
+  color: var(--fg-dim);
+}
+
+@media (max-width: 900px) {
+  .page {
+    padding: var(--space-5) var(--space-4) var(--space-7);
+  }
+  .topbar {
+    padding: var(--space-3) var(--space-4);
+  }
+  .forward-body {
+    grid-template-columns: 1fr;
+    gap: var(--space-5);
+  }
+}

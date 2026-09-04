@@ -2,7 +2,7 @@
   "name": "@storefront/web",
   "version": "0.1.0",
   "private": true,
-  "description": "Dashboard: ledger feed, chain verification and the adversarial grid. Built later.",
+  "description": "Audit dashboard: the attack log, the ledger feed with chain verification, and mandate headroom.",
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",

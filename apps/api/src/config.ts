@@ -65,9 +65,21 @@ function approvalTtlSeconds(): number {
   return raw;
 }
 
+/**
+ * Merchant identity, as it appears in the ACP product feed. Env-overridable so
+ * a deployment does not have to fork the code to put its own name on the feed.
+ */
+const merchant = {
+  name: process.env.MERCHANT_NAME ?? 'Agent-ready storefront',
+  url: process.env.MERCHANT_URL,
+  privacyPolicyUrl: process.env.MERCHANT_PRIVACY_URL,
+  termsUrl: process.env.MERCHANT_TERMS_URL,
+} as const;
+
 export const config = {
   isTest,
   port,
+  merchant,
   publicBaseUrl: publicBaseUrl(),
   /** How long a human has to act on a gated purchase before the token dies. */
   approvalTtlSeconds: approvalTtlSeconds(),
