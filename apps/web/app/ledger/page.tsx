@@ -4,9 +4,10 @@ export const dynamic = 'force-dynamic';
 
 export default function LedgerPage() {
   return (
-    <main className="page">
+    <main className="page" id="main">
       <div className="page-head">
         <div>
+          <p className="eyebrow">The record</p>
           <h1>Audit ledger</h1>
           <p>
             Every decision and every charge, in the order they happened. Each row commits to the hash

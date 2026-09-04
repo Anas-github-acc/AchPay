@@ -60,8 +60,8 @@ export function LedgerView() {
 
   return (
     <>
-      <div className="ledger-tools" style={{ marginBottom: 'var(--space-5)' }}>
-        <button className="button" onClick={() => void verify()} disabled={verifying}>
+      <div className="ledger-tools">
+        <button className="button button--secondary" onClick={() => void verify()} disabled={verifying}>
           {verifying ? 'Verifying chain…' : 'Verify ledger'}
         </button>
 
@@ -110,22 +110,22 @@ export function LedgerView() {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.seq} className={row.decision ? `row--${row.decision}` : undefined}>
-                  <td className="mono dim">
+                  <td data-label="Time" className="mono dim">
                     {formatTime(row.ts)}
                     <span style={{ marginLeft: 8 }}>#{row.seq}</span>
                   </td>
-                  <td>{row.actor}</td>
-                  <td className="intent" title={row.intent_text ?? undefined}>
+                  <td data-label="Actor">{row.actor}</td>
+                  <td data-label="Intent" className="intent" title={row.intent_text ?? undefined}>
                     {row.intent_text ?? <span className="dim">{row.event_type}</span>}
                   </td>
-                  <td>
+                  <td data-label="Decision">
                     <span className={`decision decision--${row.decision ?? 'none'}`}>
                       {row.decision ?? row.event_type}
                     </span>
                   </td>
-                  <td className="mono">{row.rule_id ?? <span className="dim">—</span>}</td>
-                  <td className="amount">{formatPaise(row.amount_paise)}</td>
-                  <td className="mono dim">{row.razorpay_ref ?? '—'}</td>
+                  <td data-label="Rule" className="mono">{row.rule_id ?? <span className="dim">—</span>}</td>
+                  <td data-label="Amount" className="amount">{formatPaise(row.amount_paise)}</td>
+                  <td data-label="Razorpay" className="mono dim">{row.razorpay_ref ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

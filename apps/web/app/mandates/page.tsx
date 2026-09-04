@@ -33,9 +33,10 @@ export default async function MandatesPage() {
   const active = mandates.filter((m) => m.status === 'active');
 
   return (
-    <main className="page">
+    <main className="page" id="main">
       <div className="page-head">
         <div>
+          <p className="eyebrow">Permissions</p>
           <h1>Mandates</h1>
           <p>
             What each agent is permitted to spend, and how much of it is left. Headroom is the

@@ -2,7 +2,6 @@ import type { SecurityAttack, SecurityReport } from '@storefront/shared';
 import { apiGet, ApiError } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { LAYERS, UNCATALOGUED } from './layers';
-import { ContinuousTesting } from './continuous-testing';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +50,7 @@ export default async function SecurityPage() {
 
   if (report === null) {
     return (
-      <main className="page">
+      <main className="page" id="main">
         <div className="page-head">
           <h1>Attack log</h1>
         </div>
@@ -73,13 +72,16 @@ export default async function SecurityPage() {
   const uncatalogued = report.attacks.filter((a) => a.catalog === null);
 
   return (
-    <main className="page">
+    <main className="page" id="main">
       <div className="page-head">
         <div>
+          <p className="eyebrow">Evidence</p>
           <h1>Attack log</h1>
           <p>
             Twenty attacks an agent, or someone using one, would actually try. Each is an automated
-            test, grouped below by the layer of the system that stops it.
+            test, grouped below by the layer of the system that stops it. Running them on a
+            schedule is <a href="/lab">Agent Lab</a>, which is not
+            built yet.
           </p>
         </div>
         <span className="chip">last run {formatDateTime(report.generated_at)}</span>
@@ -154,8 +156,6 @@ export default async function SecurityPage() {
           </div>
         </section>
       )}
-
-      <ContinuousTesting />
     </main>
   );
 }
