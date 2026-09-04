@@ -91,6 +91,8 @@ export interface RazorpayOrderPayment {
   id: string;
   status: string;
   amount: number;
+  /** Present on the payment that registered a mandate. */
+  token_id?: string | null;
   error_description?: string | null;
 }
 

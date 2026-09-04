@@ -1,6 +1,6 @@
 import { withTransaction } from '../db/pool.js';
 import { append } from '../ledger/ledger.js';
-import { releaseUsed } from '../mandates/repo.js';
+import { releaseUsed, setProviderToken } from '../mandates/repo.js';
 import { getPayment, settlePayment, staleReservations } from './repo.js';
 import type { PaymentRecord } from './repo.js';
 import type { PaymentAdapter, SettlementView } from './types.js';
@@ -112,10 +112,30 @@ async function apply(
 
   return withTransaction(async (tx) => {
     const current = await getPayment(payment.order_ref, tx);
-    if (!current || current.status !== 'created') return undefined;
+    // Both unsettled states are in scope, and this must agree with what
+    // staleReservations selects. A mandate order waiting on a person is the
+    // commonest thing the sweep sees — it is the only case that never
+    // produces a webhook — so excluding it here would make the sweep look
+    // like it ran and quietly do nothing.
+    if (!current) return undefined;
+    if (current.status !== 'created' && current.status !== 'awaiting_authorisation') {
+      return undefined;
+    }
 
     const settled = await settlePayment(payment.order_ref, terminal, view.paymentRef, tx);
     if (!settled) return undefined;
+
+    // A capture the webhook never delivered also carries the registration the
+    // webhook never delivered. Without this the sweep would settle the payment
+    // and leave the mandate unregistered forever, so the very next checkout
+    // would open another mandate order and ask the user to authorise again.
+    //
+    // Same binding as the webhook path: the token is attached to the mandate
+    // this payment row names, never to one named by the provider's response.
+    const registered =
+      terminal === 'captured' && view.tokenRef
+        ? await setProviderToken(current.mandate_id, view.tokenRef, tx)
+        : undefined;
 
     // 'abandoned' gives the reservation back; a capture the webhook missed
     // keeps it, and 'failed' releases it for the same reason a webhook
@@ -144,6 +164,13 @@ async function apply(
           status: settled.status,
           applied: true,
           detail: view.detail,
+          ...(view.tokenRef
+            ? {
+                token_ref: view.tokenRef,
+                token_stored: Boolean(registered),
+                ...(registered ? { mandate_registered: registered.id } : {}),
+              }
+            : {}),
           ...(released
             ? {
                 released_paise: current.amount_paise,

@@ -24,6 +24,17 @@ import { resetAll } from '../helpers/db.js';
 
 let app: FastifyInstance;
 
+/** Opens a mandate order rather than submitting a charge, as Razorpay does. */
+class AuthorisingAdapter implements PaymentAdapter {
+  readonly name = 'fake';
+  private n = 0;
+
+  async charge(): Promise<{ ref: string; status: 'authorisation_required' }> {
+    this.n += 1;
+    return { ref: `order_pending_${this.n}`, status: 'authorisation_required' };
+  }
+}
+
 /** An adapter that charges like the fake one but answers a scripted verdict. */
 function reconciler(view: SettlementView): PaymentAdapter {
   const fake = new FakeAdapter();
@@ -56,6 +67,32 @@ async function pendingCharge(): Promise<{ orderRef: string; mandateId: string }>
   );
   expect(result).toMatchObject({ status: 'charged' });
   expect((await getMandate(mandate.id))!.used_paise).toBe(4_000);
+  return { orderRef: (result as { order_ref: string }).order_ref, mandateId: mandate.id };
+}
+
+/**
+ * A first charge on an unregistered mandate: an order, no payment, and a
+ * reservation held behind it.
+ *
+ * This is the shape the sweep actually meets in production — a mandate order
+ * awaiting a person is the only case that never produces a webhook — so every
+ * case below is exercised against it as well as against a submitted charge.
+ */
+async function pendingAuthorisation(): Promise<{ orderRef: string; mandateId: string }> {
+  const mandate = await createMandate({
+    user_ref: 'user_reclaim_auth',
+    max_amount_paise: 500_000,
+    expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  const quote = await quoteFor([{ sku: 'BSC-PRL-300', qty: 1 }]);
+  const result = await checkout(
+    { quote_id: quote.quote_id, mandate_id: mandate.id },
+    { quotes: app.quotes, quoteStore: app.quoteStore, adapter: new AuthorisingAdapter() },
+  );
+  expect(result).toMatchObject({ status: 'authorisation_required' });
+  expect((await getPayment((result as { order_ref: string }).order_ref))!.status).toBe(
+    'awaiting_authorisation',
+  );
   return { orderRef: (result as { order_ref: string }).order_ref, mandateId: mandate.id };
 }
 
@@ -92,6 +129,65 @@ describe('reclaiming stale reservations', () => {
     expect((await getPayment(orderRef))!.status).toBe('abandoned');
     expect((await getMandate(mandateId))!.used_paise).toBe(0);
     expect(await verifyChain()).toMatchObject({ ok: true });
+  });
+
+  it('releases a mandate order nobody ever authorised', async () => {
+    // The regression this exists for. The sweep selected these rows, asked the
+    // provider, got a verdict — and then refused to act on it, because the
+    // guard inside the transaction only recognised 'created'. Every mandate
+    // order was un-reclaimable while the sweep reported itself as working.
+    const { orderRef, mandateId } = await pendingAuthorisation();
+    await age(orderRef, 20);
+
+    const summary = await reclaimStaleReservations(
+      reconciler({ status: 'abandoned', paymentRef: null, detail: 'never attempted' }),
+    );
+
+    expect(summary.unchanged).toEqual([]);
+    expect(summary.released).toMatchObject([{ order_ref: orderRef, released_paise: 4_000 }]);
+    expect((await getPayment(orderRef))!.status).toBe('abandoned');
+    expect((await getMandate(mandateId))!.used_paise).toBe(0);
+    expect(await verifyChain()).toMatchObject({ ok: true });
+  });
+
+  it('settles a mandate order that captured, and registers the mandate', async () => {
+    // A capture whose webhook never arrived carries the registration that
+    // never arrived with it. Settling the payment and leaving the mandate
+    // unregistered would send the user back to authorise all over again.
+    const { orderRef, mandateId } = await pendingAuthorisation();
+    await age(orderRef, 20);
+
+    const summary = await reclaimStaleReservations(
+      reconciler({
+        status: 'captured',
+        paymentRef: 'pay_RECONCILED',
+        tokenRef: 'token_RECONCILED',
+        detail: 'order is paid',
+      }),
+    );
+
+    expect(summary.settled).toMatchObject([{ order_ref: orderRef, status: 'captured' }]);
+    expect((await getPayment(orderRef))!.status).toBe('captured');
+    expect((await getMandate(mandateId))!.provider_token).toBe('token_RECONCILED');
+    // The money moved, so the reservation stands.
+    expect((await getMandate(mandateId))!.used_paise).toBe(4_000);
+  });
+
+  it('does not register a mandate from a reconciled failure', async () => {
+    const { orderRef, mandateId } = await pendingAuthorisation();
+    await age(orderRef, 20);
+
+    await reclaimStaleReservations(
+      reconciler({
+        status: 'failed',
+        paymentRef: 'pay_NOPE',
+        tokenRef: 'token_SHOULD_NOT_STICK',
+        detail: 'order failed',
+      }),
+    );
+
+    expect((await getMandate(mandateId))!.provider_token).toBeNull();
+    expect((await getMandate(mandateId))!.used_paise).toBe(0);
   });
 
   it('leaves a reservation younger than the window alone', async () => {

@@ -300,6 +300,9 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
       return {
         status: 'captured',
         paymentRef: captured?.id ?? null,
+        // The same token the webhook would have carried. A capture this
+        // storefront learns about by asking still registers the mandate.
+        tokenRef: captured?.token_id ?? null,
         detail: `order ${orderRef} is paid`,
       };
     }

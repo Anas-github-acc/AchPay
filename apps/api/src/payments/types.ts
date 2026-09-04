@@ -66,6 +66,12 @@ export interface SettlementView {
   status: ChargeStatus;
   /** The provider's payment id, once one exists. */
   paymentRef: string | null;
+  /**
+   * The mandate token, when the reconciled payment is the one that registered
+   * the mandate. A capture the webhook never delivered carries the
+   * registration the webhook never delivered, and both have to land.
+   */
+  tokenRef?: string | null;
   /** Why the reconciler reached that status. Recorded, never shown to an agent. */
   detail: string;
 }
