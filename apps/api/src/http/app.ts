@@ -265,6 +265,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       mandate_id: payment.mandate_id,
       /** Publishable by design; Razorpay's browser script takes it as input. */
       key_id: config.razorpay.keyId ?? null,
+      /**
+       * Whether this is a test key. The page uses it to steer a payer away
+       * from methods test mode cannot complete — a UPI QR in test mode has no
+       * app to scan it, so it renders and then simply never settles. Derived
+       * from the key rather than from NODE_ENV: what matters is which
+       * Razorpay account the payment is going to.
+       */
+      test_mode: (config.razorpay.keyId ?? '').startsWith('rzp_test_'),
       customer_id: payment.provider_customer_id,
       /** Already registered, so this page has nothing left to do. */
       mandate_registered: Boolean(mandate?.provider_token),

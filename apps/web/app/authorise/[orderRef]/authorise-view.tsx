@@ -34,6 +34,7 @@ interface Authorisation {
   quote_id: string | null;
   mandate_id: string;
   key_id: string | null;
+  test_mode: boolean;
   customer_id: string | null;
   mandate_registered: boolean;
   mandate_max_amount_paise: number | null;
@@ -126,6 +127,13 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
                 : formatPaise(data.mandate_max_amount_paise)
             }`
           : `Payment of ${formatPaise(data.amount_paise)}`,
+        // Test mode has no UPI app, so a QR renders and then never settles —
+        // a payer can sit in front of it indefinitely with attempts still at
+        // zero. Card is the one method that completes there, so it leads.
+        // Nothing is restricted: the other methods are still on the sheet.
+        ...(data.test_mode && data.mandate_registered
+          ? { prefill: { method: 'card' } }
+          : {}),
         // Nothing is confirmed here. The handler only stops the spinner; the
         // mandate is registered by the webhook or not at all.
         handler: () => {
@@ -253,6 +261,13 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
                 ? 'Authorise with Razorpay'
                 : 'Pay with Razorpay'}
           </button>
+          {data.test_mode && !registering && (
+            <p className="dim">
+              Test mode: pay by card. A UPI QR here has no app to scan it, so it will display and
+              never settle. Card <span className="mono">4111 1111 1111 1111</span>, any future
+              expiry, any CVV, OTP <span className="mono">1234</span>.
+            </p>
+          )}
           {note && <p className="dim">{note}</p>}
         </section>
       )}

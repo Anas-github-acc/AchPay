@@ -216,6 +216,22 @@ describe('mandate registration', () => {
       expect(res.json().lines).toHaveLength(1);
     });
 
+    it('tells the page whether the key is a test key', async () => {
+      // The page steers a payer away from methods test mode cannot complete.
+      // Derived from the key, not from NODE_ENV: what matters is which
+      // Razorpay account the money is going to.
+      const mandate = await mandateFor('user_testmode');
+      const quote = await quoteFor([{ sku: 'BSC-PRL-300', qty: 1 }]);
+      await checkout(
+        { quote_id: quote.quote_id, mandate_id: mandate.id },
+        { quotes: app.quotes, quoteStore: app.quoteStore, adapter },
+      );
+
+      const res = await app.inject({ method: 'GET', url: '/authorise/order_auth_1' });
+      expect(res.json()).toHaveProperty('test_mode');
+      expect(typeof res.json().test_mode).toBe('boolean');
+    });
+
     it('404s the authorisation page for an order that does not exist', async () => {
       const res = await app.inject({ method: 'GET', url: '/authorise/order_nope' });
       expect(res.statusCode).toBe(404);
