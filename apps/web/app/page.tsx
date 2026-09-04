@@ -35,7 +35,7 @@ export default async function Landing() {
             </p>
             <div className="hero-actions">
               <Link className="button" href="/security">
-                See the attack log
+                Try AchPay
               </Link>
               <Link className="button button--secondary" href="/ledger">
                 Read the ledger
@@ -160,9 +160,9 @@ export default async function Landing() {
             Every decision names the rule that made it, including the ones that said yes. Start with
             the attacks, then read the rows they wrote.
           </p>
-          <div className="hero-actions" style={{ justifyContent: 'center' }}>
+          <div className="hero-actions hero-actions--center">
             <Link className="button" href="/security">
-              See the attack log
+              Try AchPay
             </Link>
             <Link className="button button--secondary" href="/lab">
               Agent Lab

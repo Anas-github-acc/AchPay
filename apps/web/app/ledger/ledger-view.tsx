@@ -32,6 +32,18 @@ export function LedgerView() {
   const [chain, setChain] = useState<VerifyChainResult | null>(null);
   const [verifying, setVerifying] = useState(false);
 
+  /* Which rows are open. Only the phone layout collapses anything — the table
+     shows every column at once — so this set is inert above 640px. */
+  const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+
+  const toggle = useCallback((seq: number) => {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(seq)) next.add(seq);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -89,7 +101,7 @@ export function LedgerView() {
           </output>
         )}
 
-        <span className="chip" style={{ marginLeft: 'auto' }}>
+        <span className="chip ledger-live">
           <span className="live-dot" aria-hidden="true" /> live · {rows.length} rows · every{' '}
           {POLL_MS / 1000}s
         </span>
@@ -120,31 +132,55 @@ export function LedgerView() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row.seq} className={row.decision ? `row--${row.decision}` : undefined}>
-                  <td data-label="Time" className="mono dim">
-                    {formatTime(row.ts)}
-                    <span style={{ marginLeft: 8 }}>#{row.seq}</span>
-                  </td>
-                  <td data-label="Actor">{row.actor}</td>
-                  <td data-label="Intent" className="intent" title={row.intent_text ?? undefined}>
-                    {row.intent_text ?? <span className="dim">{row.event_type}</span>}
-                  </td>
-                  <td data-label="Decision">
-                    <span className={`decision decision--${row.decision ?? 'none'}`}>
-                      {row.decision ?? row.event_type}
-                    </span>
-                    {authorisedByHuman(row) && (
-                      <span className="decision-note" title="A human approved this gate before it charged">
-                        cleared
+              {rows.map((row) => {
+                const isOpen = open.has(row.seq);
+                const intent = row.intent_text ?? row.event_type;
+                return (
+                  <tr
+                    key={row.seq}
+                    className={row.decision ? `row--${row.decision}` : undefined}
+                    data-open={isOpen ? '' : undefined}
+                  >
+                    <td data-label="Time" data-role="detail" className="mono dim">
+                      <span>
+                        {formatTime(row.ts)} · #{row.seq}
                       </span>
-                    )}
-                  </td>
-                  <td data-label="Rule" className="mono">{row.rule_id ?? <span className="dim">—</span>}</td>
-                  <td data-label="Amount" className="amount">{formatPaise(row.amount_paise)}</td>
-                  <td data-label="Razorpay" className="mono dim">{row.razorpay_ref ?? '—'}</td>
-                </tr>
-              ))}
+                    </td>
+                    <td data-label="Actor" data-role="detail">{row.actor}</td>
+                    <td data-label="Intent" data-role="intent" className="intent" title={row.intent_text ?? undefined}>
+                      {/* Covers the whole card on a phone, so the tap target is
+                          the row rather than a chevron. display:none on desktop. */}
+                      <button
+                        type="button"
+                        className="row-toggle"
+                        aria-expanded={isOpen}
+                        aria-label={`${intent} — ${formatPaise(row.amount_paise)}. Show time, actor, rule and payment reference.`}
+                        onClick={() => toggle(row.seq)}
+                      />
+                      {row.intent_text ?? <span className="dim intent-fallback">{row.event_type}</span>}
+                    </td>
+                    <td data-label="Decision" data-role="decision">
+                      <span className={`decision decision--${row.decision ?? 'none'}`}>
+                        {row.decision ?? row.event_type}
+                      </span>
+                      {authorisedByHuman(row) && (
+                        <span className="decision-note" title="A human approved this gate before it charged">
+                          cleared
+                        </span>
+                      )}
+                    </td>
+                    <td data-label="Rule" data-role="detail" className="mono">
+                      {row.rule_id ?? <span className="dim">—</span>}
+                    </td>
+                    <td data-label="Amount" data-role="amount" className="amount">
+                      {formatPaise(row.amount_paise)}
+                    </td>
+                    <td data-label="Razorpay" data-role="detail" className="mono dim">
+                      {row.razorpay_ref ?? '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

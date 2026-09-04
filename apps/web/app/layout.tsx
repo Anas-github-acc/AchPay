@@ -10,11 +10,21 @@ export const metadata = {
     'AchPay gives an AI agent a wallet it cannot misuse: signed quotes, a pure policy engine, human approval and a hash-chained ledger.',
 };
 
+/* viewportFit: 'cover' is what lets the tab bar and the header pad themselves
+   against the notch and the home indicator with env(safe-area-inset-*). */
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover' as const,
+  themeColor: '#f4f3ee',
+};
+
+/** `short` is the tab-bar label: four of these sit side by side on a 360px phone. */
 const links = [
-  { href: '/security', label: 'Attack log' },
-  { href: '/ledger', label: 'Ledger' },
-  { href: '/mandates', label: 'Mandates' },
-  { href: '/lab', label: 'Agent Lab' },
+  { href: '/security', label: 'Attack log', short: 'Attacks' },
+  { href: '/ledger', label: 'Ledger', short: 'Ledger' },
+  { href: '/mandates', label: 'Mandates', short: 'Mandates' },
+  { href: '/lab', label: 'Agent Lab', short: 'Lab' },
 ];
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -51,12 +61,25 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 </NavLink>
               ))}
             </nav>
+            <Link className="button button--compact nav-try" href="/security">
+              Try AchPay
+            </Link>
           </header>
           {children}
           <footer className="site-foot">
             <span>AchPay — an agentic commerce hub for secure AI payments.</span>
             <span className="mono">every amount is an integer number of paise</span>
           </footer>
+          {/* The phone navigation. Four sections, always all four visible, no
+              hamburger — the same rule the desktop nav follows, moved to the
+              thumb. Hidden above 640px, where .nav does the job. */}
+          <nav className="tabbar" aria-label="Sections">
+            {links.map((link) => (
+              <NavLink key={link.href} href={link.href} className="tabbar-link">
+                {link.short}
+              </NavLink>
+            ))}
+          </nav>
         </div>
       </body>
     </html>

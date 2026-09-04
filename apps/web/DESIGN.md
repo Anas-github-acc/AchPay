@@ -86,10 +86,26 @@ pull-quote and the receipt both hang out of the text column.
 
 ## Responsive
 
-Single column below 900px. Nav shows all four links, scrolling horizontally
-rather than collapsing into a hamburger. Body type goes *up* to 18px on mobile,
-not down. The ledger table becomes stacked cards below 640px, each cell labelled
-from its `data-label`.
+Single column below 900px. Body type goes *up* to 18px on mobile, not down.
+
+Below 760px the navigation moves to a fixed bar at the bottom of the viewport —
+still all four sections, still no hamburger, just within reach of a thumb. The
+header keeps only the mark and the one call to action, and stays sticky. Both
+bars pad themselves against the notch and the home indicator with
+`env(safe-area-inset-*)`, which is why the viewport is declared
+`viewportFit: 'cover'`.
+
+**Try AchPay** is the only call to action in the chrome. It sits after the nav
+on a desktop and beside the mark on a phone, so it is on every page at both
+sizes, and it opens the attack log — the part of the system a visitor can
+actually watch run.
+
+Below 640px the ledger becomes one line per entry: the decision, what was asked
+for, and the amount. Time, actor, rule and payment reference are behind a tap,
+and the whole card is the target rather than the chevron. Once a card is open
+the target shrinks back to its summary line, so the rule id and the payment
+reference underneath can still be selected. Nothing collapses on a desktop —
+the table already shows every column at once.
 
 ## Reject
 
