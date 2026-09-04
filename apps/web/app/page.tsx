@@ -34,7 +34,7 @@ export default async function Landing() {
               the agent may spend, refuses everything else, and writes down why.
             </p>
             <div className="hero-actions">
-              <Link className="button" href="/security">
+              <Link className="button" href="https://github.com/Anas-github-acc/AchPay">
                 Try AchPay
               </Link>
               <Link className="button button--secondary" href="/ledger">

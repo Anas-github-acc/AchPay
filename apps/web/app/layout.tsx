@@ -61,7 +61,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 </NavLink>
               ))}
             </nav>
-            <Link className="button button--compact nav-try" href="/security">
+            <Link className="button button--compact nav-try" href="https://github.com/Anas-github-acc/AchPay">
               Try AchPay
             </Link>
           </header>
