@@ -13,3 +13,15 @@ const app = await buildApp();
 startReclaimLoop(app.adapter);
 
 await app.listen({ port: config.port, host: '0.0.0.0' });
+
+// The one URL a remote MCP client needs, printed rather than guessed at. It is
+// the public origin, not the bind address, because the point of it is to be
+// pasted into something that is not on this machine.
+if (config.mcpHttpToken === undefined) {
+  console.log('MCP over HTTP is off. Set MCP_HTTP_TOKEN to mount /mcp.');
+} else {
+  // Origin only: PUBLIC_BASE_URL is allowed to carry a path (it is what the
+  // payment provider is pointed at), and /mcp hangs off the root.
+  const origin = new URL(config.publicBaseUrl).origin;
+  console.log(`MCP over HTTP: ${origin}/mcp?key=${config.mcpHttpToken}`);
+}

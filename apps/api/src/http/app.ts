@@ -11,6 +11,7 @@ import { readAll, readByOrderRef, verifyChain } from '../ledger/ledger.js';
 import { checkout } from '../checkout/checkout.js';
 import { webhookRoutes } from './webhook-route.js';
 import { approvalRoutes } from './approval-routes.js';
+import { mcpRoutes } from './mcp-route.js';
 import { createMandate, getMandate, listMandates, revokeMandate } from '../mandates/repo.js';
 import { buildProductFeed } from '../catalog/feed.js';
 import { getSecurityReport } from '../security/report.js';
@@ -305,6 +306,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   app.get('/ledger/verify', async () => verifyChain());
+
+  // The MCP tools over HTTP, for a client that cannot spawn a subprocess. Only
+  // when a token is configured — see http/mcp-route.ts for why.
+  if (config.mcpHttpToken !== undefined) {
+    await mcpRoutes(app, config.mcpHttpToken);
+  }
 
   return app;
 }

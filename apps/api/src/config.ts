@@ -88,9 +88,20 @@ const merchant = {
   termsUrl: process.env.MERCHANT_TERMS_URL,
 } as const;
 
+/**
+ * The shared secret the HTTP MCP route requires. Unset means the route is not
+ * mounted at all: it is the one surface that hands a remote client the payment
+ * tools, so it opts in rather than out.
+ */
+function mcpHttpToken(): string | undefined {
+  const raw = process.env.MCP_HTTP_TOKEN?.trim();
+  return raw === undefined || raw === '' ? undefined : raw;
+}
+
 export const config = {
   isTest,
   port,
+  mcpHttpToken: mcpHttpToken(),
   merchant,
   publicBaseUrl: publicBaseUrl(),
   /** Origin of the dashboard, where the mandate-authorisation page lives. */

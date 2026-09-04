@@ -65,8 +65,10 @@ Run from the repo root.
 
 ```
 pnpm dev               API on :3000, watching
+pnpm dev:all           API, dashboard and tunnel together (--no-tunnel skips it)
 pnpm start             API once, no watch
 pnpm dev:web           dashboard on :3001
+pnpm ngrok             the tunnel alone, on the reserved URL
 pnpm test              every test, from apps/api
 pnpm test:adversarial  the attack grid, writes data/adversarial-results.json
 pnpm typecheck         every package
@@ -75,3 +77,8 @@ pnpm verify:ledger     walk the hash chain
 pnpm reclaim           release headroom held by payments that never happened
 pnpm mcp               the MCP server over stdio
 ```
+
+The same tools are served over HTTP at `/mcp`, for a client that cannot spawn a
+subprocess. That route only exists when `MCP_HTTP_TOKEN` is set, and every
+request has to carry the token — `Authorization: Bearer <token>`, or `?key=` for
+a client that cannot set headers. The API prints the full URL at boot.

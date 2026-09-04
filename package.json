@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx watch apps/api/src/http/server.ts",
+    "dev:all": "./scripts/dev-all.sh",
     "ngrok": "ngrok http 3000 --url https://unpaced-dan-semioptimistically.ngrok-free.dev",
     "start": "tsx apps/api/src/http/server.ts",
     "dev:web": "pnpm --filter @storefront/web dev",
