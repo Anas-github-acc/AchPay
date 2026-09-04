@@ -1,3 +1,4 @@
+import type { ChargeStatus } from '../payments/types.js';
 import type { SignedQuote } from '../quotes/types.js';
 
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired';
@@ -28,7 +29,7 @@ export interface PendingApproval {
  * relays. Two axes, kept separate on purpose:
  *
  *   status         — where the human is: pending, approved, rejected, expired
- *   payment_status — where the money is: created, captured, failed
+ *   payment_status — where the money is: created, captured, failed, abandoned
  *
  * Collapsing them would let "approved" read as "paid", and an approval is not
  * a payment. payment_status is absent until a charge has actually been booked.
@@ -45,6 +46,6 @@ export interface ApprovalStatusView {
   expires_at: string;
   decided_at: string | null;
   order_ref: string | null;
-  payment_status: 'created' | 'captured' | 'failed' | null;
+  payment_status: ChargeStatus | null;
   charge_error: string | null;
 }

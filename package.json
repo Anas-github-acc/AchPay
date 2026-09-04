@@ -16,6 +16,7 @@
     "test:watch": "vitest --root apps/api",
     "test:adversarial": "vitest run --root apps/api tests/adversarial",
     "verify:ledger": "tsx apps/api/scripts/verify-ledger.ts",
+    "reclaim": "tsx apps/api/scripts/reclaim.ts",
     "smoke:razorpay": "tsx apps/api/scripts/razorpay-smoke.ts",
     "test:webhook-live": "tsx apps/api/scripts/webhook-live-test.ts",
     "test:autopay": "tsx apps/api/scripts/autopay-test.ts",

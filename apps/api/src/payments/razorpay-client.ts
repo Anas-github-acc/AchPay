@@ -72,8 +72,19 @@ export interface RazorpayOrder {
   entity: string;
   amount: number;
   currency: string;
+  /** 'created' (nothing tried yet), 'attempted', or 'paid'. */
   status: string;
   receipt?: string | null;
+  /** How many payments have been made against this order. */
+  attempts?: number;
+}
+
+/** One payment against an order, as the fetch-payments endpoint returns it. */
+export interface RazorpayOrderPayment {
+  id: string;
+  status: string;
+  amount: number;
+  error_description?: string | null;
 }
 
 export interface RecurringPaymentCreateBody {
@@ -101,6 +112,8 @@ export interface RazorpayClient {
   };
   orders: {
     create(body: MandateOrderCreateBody | PlainOrderCreateBody): Promise<RazorpayOrder>;
+    fetch(orderId: string): Promise<RazorpayOrder>;
+    fetchPayments(orderId: string): Promise<{ items: RazorpayOrderPayment[] }>;
   };
   payments: {
     createRecurringPayment(body: RecurringPaymentCreateBody): Promise<RazorpayRecurringPayment>;

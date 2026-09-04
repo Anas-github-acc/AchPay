@@ -100,6 +100,63 @@ export async function incrementUsed(
   return rows[0] ? toMandate(rows[0]) : undefined;
 }
 
+/**
+ * Gives headroom back when a charge that was booked at submission later fails
+ * on the rail.
+ *
+ * checkout books used_paise the moment the adapter accepts the charge, which
+ * is the right way round — an in-flight payment must not be spendable twice.
+ * But a booking made against an outcome that has not happened yet has to be
+ * reversible once the rail says no, or every failed payment quietly burns
+ * headroom the user never spent.
+ *
+ * Floored at zero rather than trusted to balance. A mandate whose used_paise
+ * went negative would hand out headroom nobody authorised, and that is the one
+ * direction this must never fail in.
+ */
+export async function releaseUsed(
+  id: string,
+  amountPaise: number,
+  db: Db = pool,
+): Promise<MandateRecord | undefined> {
+  if (!Number.isSafeInteger(amountPaise) || amountPaise < 0) {
+    throw new Error('amountPaise must be a non-negative integer number of paise');
+  }
+  const { rows } = await db.query<RawMandate>(
+    `update mandates
+        set used_paise = greatest(used_paise - $2, 0)
+      where id = $1
+      returning *`,
+    [id, amountPaise],
+  );
+  return rows[0] ? toMandate(rows[0]) : undefined;
+}
+
+/**
+ * Re-books a released charge that captured after all.
+ *
+ * Razorpay allows a second payment attempt on an order that already has a
+ * failed one, so `failed` then `captured` is a sequence that really arrives.
+ * Unlike incrementUsed there is no ceiling guard here, and that is deliberate:
+ * the money has moved. Whether it was allowed to move was decided at checkout,
+ * under the lock, by the policy engine; refusing the write now would not undo
+ * the debit, it would only make the mandate disagree with the bank.
+ */
+export async function rebookUsed(
+  id: string,
+  amountPaise: number,
+  db: Db = pool,
+): Promise<MandateRecord | undefined> {
+  if (!Number.isSafeInteger(amountPaise) || amountPaise < 0) {
+    throw new Error('amountPaise must be a non-negative integer number of paise');
+  }
+  const { rows } = await db.query<RawMandate>(
+    'update mandates set used_paise = used_paise + $2 where id = $1 returning *',
+    [id, amountPaise],
+  );
+  return rows[0] ? toMandate(rows[0]) : undefined;
+}
+
 /** Records the registered mandate token once authorisation has completed. */
 export async function setProviderToken(
   id: string,

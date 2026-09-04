@@ -38,6 +38,12 @@ function recordingClient(overrides: Partial<RazorpayClient> = {}) {
           status: 'created',
         };
       },
+      async fetch(orderId: string) {
+        return { id: orderId, entity: 'order', amount: 0, currency: 'INR', status: 'created', attempts: 0 };
+      },
+      async fetchPayments() {
+        return { items: [] };
+      },
     },
     payments: {
       async createRecurringPayment(body) {
@@ -224,6 +230,12 @@ describe('RazorpayMandateAdapter', () => {
             error: { code: 'BAD_REQUEST_ERROR', description: 'The token type is invalid' },
           };
         },
+      async fetch(orderId: string) {
+        return { id: orderId, entity: 'order', amount: 0, currency: 'INR', status: 'created', attempts: 0 };
+      },
+      async fetchPayments() {
+        return { items: [] };
+      },
       },
     });
     const adapter = new RazorpayMandateAdapter({ client, db: fakeDb({ customerId: null }) });
@@ -246,6 +258,12 @@ describe('RazorpayMandateAdapter', () => {
             status: 'created',
           };
         },
+      async fetch(orderId: string) {
+        return { id: orderId, entity: 'order', amount: 0, currency: 'INR', status: 'created', attempts: 0 };
+      },
+      async fetchPayments() {
+        return { items: [] };
+      },
       },
     });
     const adapter = new RazorpayMandateAdapter({ client, db: fakeDb({ customerId: null }) });
@@ -290,6 +308,12 @@ describe('RazorpayMandateAdapter', () => {
             },
           };
         },
+      async fetch(orderId: string) {
+        return { id: orderId, entity: 'order', amount: 0, currency: 'INR', status: 'created', attempts: 0 };
+      },
+      async fetchPayments() {
+        return { items: [] };
+      },
       },
     });
     const adapter = new RazorpayMandateAdapter({ client, db: fakeDb({ customerId: null }) });

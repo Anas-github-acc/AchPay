@@ -27,8 +27,8 @@ export default async function Landing() {
       <section className="hero">
         <div className="wrap hero-grid">
           <div>
-            <p className="eyebrow">Agentic Commerce Hub</p>
-            <h1>Buy me chai.</h1>
+            {/* <p className="eyebrow">Agentic Commerce Hub</p> */}
+            <h1>Agent, Buy me a chai.</h1>
             <p className="hero-lede">
               Four words, one agent, and your card. AchPay is the layer in between — it decides what
               the agent may spend, refuses everything else, and writes down why.

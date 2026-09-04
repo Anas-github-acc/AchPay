@@ -43,6 +43,12 @@ function fakeClient(): RazorpayClient {
           status: 'created',
         };
       },
+      async fetch(orderId: string) {
+        return { id: orderId, entity: 'order', amount: 0, currency: 'INR', status: 'created', attempts: 0 };
+      },
+      async fetchPayments() {
+        return { items: [] };
+      },
     },
     payments: {
       async createRecurringPayment() {

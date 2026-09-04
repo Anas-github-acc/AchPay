@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import { withTransaction } from '../db/pool.js';
+import type { Db } from '../db/pool.js';
 import { append } from '../ledger/ledger.js';
 import { getPayment, settlePayment } from '../payments/repo.js';
+import type { PaymentRecord } from '../payments/repo.js';
+import { rebookUsed, releaseUsed } from '../mandates/repo.js';
 import type { ChargeStatus } from '../payments/types.js';
 
 const UNIQUE_VIOLATION = '23505';
@@ -70,6 +73,13 @@ export async function processWebhook(delivery: WebhookDelivery): Promise<Webhook
         ? await settlePayment(parsed.orderRef!, terminal, parsed.paymentRef, tx)
         : undefined;
 
+      // 2b. Keep the mandate's headroom in step with the payment. checkout
+      //     books used_paise when the charge is submitted, so a settlement
+      //     that contradicts that booking has to move it back. Gated on
+      //     `settled`, which is only truthy when this delivery is the one that
+      //     actually moved the row — a redelivery adjusts nothing.
+      const adjustment = payment && settled ? await reconcileMandate(payment, settled.status, tx) : undefined;
+
       // 3. Append the row. Every delivery that gets this far leaves a trace,
       //    including ones we could not match, because "a webhook arrived for an
       //    order we do not know" is exactly what an auditor needs to see.
@@ -90,6 +100,7 @@ export async function processWebhook(delivery: WebhookDelivery): Promise<Webhook
             // What the payment moved to, or why it did not move.
             status: settled?.status ?? payment?.status ?? null,
             applied: Boolean(settled),
+            ...(adjustment ?? {}),
             ...(payment && terminal && !settled
               ? { note: `payment already ${payment.status}; not reapplied` }
               : {}),
@@ -123,6 +134,41 @@ export async function processWebhook(delivery: WebhookDelivery): Promise<Webhook
     // is traceable to the event it duplicates.
     return { status: 'duplicate', event_id: eventId, ledger_seq: await seqOf(eventId) };
   }
+}
+
+/**
+ * Moves used_paise to match what the rail finally said.
+ *
+ * Three cases, and only two of them write:
+ *   created -> failed:    the booking was for a payment that never happened,
+ *                         so give the headroom back.
+ *   failed  -> captured:  a retry on the same order succeeded after we had
+ *                         already released it. Book it again.
+ *   created -> captured:  the booking was right the first time. Nothing to do.
+ *
+ * The prior status comes from the row read before settlePayment ran, which is
+ * what makes the second case distinguishable from the third.
+ */
+async function reconcileMandate(
+  before: PaymentRecord,
+  after: ChargeStatus,
+  db: Db,
+): Promise<Record<string, number | null> | undefined> {
+  if (after === 'failed') {
+    const mandate = await releaseUsed(before.mandate_id, before.amount_paise, db);
+    return {
+      released_paise: before.amount_paise,
+      mandate_used_paise: mandate?.used_paise ?? null,
+    };
+  }
+  if (after === 'captured' && before.status === 'failed') {
+    const mandate = await rebookUsed(before.mandate_id, before.amount_paise, db);
+    return {
+      rebooked_paise: before.amount_paise,
+      mandate_used_paise: mandate?.used_paise ?? null,
+    };
+  }
+  return undefined;
 }
 
 async function seqOf(eventId: string): Promise<number | null> {

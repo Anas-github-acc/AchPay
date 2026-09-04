@@ -9,7 +9,7 @@ import type {
   TokenFrequency,
 } from './razorpay-client.js';
 import { createSdkClient } from './razorpay-client.js';
-import type { ChargeRequest, ChargeResult, PaymentAdapter } from './types.js';
+import type { ChargeRequest, ChargeResult, PaymentAdapter, SettlementView } from './types.js';
 
 /**
  * Documented bounds for a UPI mandate token's max_amount, in paise.
@@ -251,6 +251,62 @@ export class RazorpayMandateAdapter implements PaymentAdapter {
 
     const ref = payment?.razorpay_payment_id ?? order.id;
     return { ref, status: 'created' };
+  }
+
+  /**
+   * Asks Razorpay what became of an order, for payments no webhook ever
+   * settled.
+   *
+   * A mandate order awaiting UPI authorisation is the case this exists for.
+   * Nobody authorises it, so no payment is ever attempted, so no
+   * payment.captured or payment.failed is ever sent — and the reservation
+   * checkout took would otherwise sit against the mandate forever.
+   *
+   * The order's own status is the authority, not the clock. `paid` is a
+   * capture whose webhook went missing, which reconciliation has to settle
+   * rather than reclaim; `attempted` means someone is mid-flow and it is not
+   * ours to end; only `created` with no attempts is genuinely abandoned, and
+   * even then only once the caller has decided enough time has passed.
+   */
+  async reconcile(orderRef: string): Promise<SettlementView> {
+    // A recurring debit returns a payment id, not an order id. There is no
+    // order to fetch, so the honest answer is that we do not know.
+    if (!orderRef.startsWith('order_')) {
+      return {
+        status: 'created',
+        paymentRef: null,
+        detail: `${orderRef} is not an order id; nothing to reconcile against`,
+      };
+    }
+
+    const order = await this.client.orders.fetch(orderRef);
+
+    if (order.status === 'paid') {
+      const captured = (await this.client.orders.fetchPayments(orderRef)).items.find(
+        (p) => p.status === 'captured',
+      );
+      return {
+        status: 'captured',
+        paymentRef: captured?.id ?? null,
+        detail: `order ${orderRef} is paid`,
+      };
+    }
+
+    if (order.status === 'created' && (order.attempts ?? 0) === 0) {
+      return {
+        status: 'abandoned',
+        paymentRef: null,
+        detail: `order ${orderRef} was never attempted`,
+      };
+    }
+
+    // 'attempted', or 'created' with attempts on it: a customer is in the
+    // flow, or a payment failed and they may retry. Neither is ours to end.
+    return {
+      status: 'created',
+      paymentRef: null,
+      detail: `order ${orderRef} is ${order.status} with ${order.attempts ?? 0} attempt(s)`,
+    };
   }
 }
 

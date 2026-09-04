@@ -201,7 +201,7 @@ describe('POST /webhooks/razorpay', () => {
     expect(await countLedger("event_type = 'webhook'")).toBe(0);
   });
 
-  it('payment.failed records the failure and leaves used_paise unchanged', async () => {
+  it('payment.failed records the failure and gives the headroom back', async () => {
     const { orderRef, mandateId } = await chargeOnce();
     const before = (await getMandate(mandateId))!.used_paise;
     expect(before).toBe(4_000);
@@ -213,9 +213,24 @@ describe('POST /webhooks/razorpay', () => {
     expect((await getPayment(orderRef))!.status).toBe('failed');
     expect(await countLedger("event_type = 'webhook' and payload ->> 'status' = 'failed'")).toBe(1);
 
-    // The webhook never touches the mandate. Releasing headroom on a failure
-    // is a decision for a human, not a side effect of a delivery.
-    expect((await getMandate(mandateId))!.used_paise).toBe(before);
+    // checkout books used_paise when the charge is submitted, because an
+    // in-flight payment must not be spendable twice. Once the rail says the
+    // payment did not happen, that booking is for nothing, and holding it
+    // would burn headroom the user never spent.
+    expect((await getMandate(mandateId))!.used_paise).toBe(0);
+    expect(await verifyChain()).toMatchObject({ ok: true });
+  });
+
+  it('a redelivered payment.failed releases the headroom exactly once', async () => {
+    const { orderRef, mandateId } = await chargeOnce();
+
+    await deliver(event('payment.failed', orderRef), { eventId: 'evt_fail_once' });
+    // A different event id, so the delivery is not deduped by the primary key.
+    // settlePayment is the guard that has to hold here: the row already left
+    // 'created', so nothing moves and nothing is released a second time.
+    await deliver(event('payment.failed', orderRef), { eventId: 'evt_fail_again' });
+
+    expect((await getMandate(mandateId))!.used_paise).toBe(0);
     expect(await verifyChain()).toMatchObject({ ok: true });
   });
 
@@ -223,7 +238,7 @@ describe('POST /webhooks/razorpay', () => {
     // Exactly what a real card retry produced: the first attempt failed, the
     // customer tried again on the same order and it captured. A failed attempt
     // is not terminal for an order, so the capture has to win.
-    const { orderRef } = await chargeOnce();
+    const { orderRef, mandateId } = await chargeOnce();
 
     await deliver(event('payment.failed', orderRef), { eventId: 'evt_a' });
     expect((await getPayment(orderRef))!.status).toBe('failed');
@@ -238,6 +253,10 @@ describe('POST /webhooks/razorpay', () => {
     expect(payment!.status).toBe('captured');
     expect(payment!.payment_ref).toBe('pay_RETRY');
     expect(await countLedger("event_type = 'webhook'")).toBe(2);
+
+    // The failure released the reservation; the capture has to book it again,
+    // or the mandate ends up disagreeing with the bank about money that moved.
+    expect((await getMandate(mandateId))!.used_paise).toBe(4_000);
   });
 
   it('never lets a failure overwrite a capture', async () => {

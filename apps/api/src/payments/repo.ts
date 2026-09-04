@@ -88,7 +88,15 @@ export async function settlePayment(
   // A capture supersedes a previous failure; a failure never supersedes a
   // capture. Expressed in the where clause so it holds under concurrent
   // deliveries rather than depending on the order they arrive in.
-  const allowedFrom = status === 'captured' ? ['created', 'failed'] : ['created'];
+  const allowedFrom =
+    status === 'captured'
+      ? // A capture supersedes anything short of a capture, including an
+        // abandonment: reconciliation can only ever have been working from
+        // what the provider knew at the time it was asked.
+        ['created', 'failed', 'abandoned']
+      : status === 'abandoned'
+        ? ['created']
+        : ['created'];
   const { rows } = await db.query<RawPayment>(
     `update payments
         set status = $2, payment_ref = coalesce($3, payment_ref), updated_at = now()
@@ -98,6 +106,32 @@ export async function settlePayment(
     [orderRef, status, paymentRef, allowedFrom],
   );
   return rows[0] ? toPayment(rows[0]) : undefined;
+}
+
+/**
+ * Payments still holding a reservation long after they were submitted.
+ *
+ * These are the rows the reclaim sweep asks the provider about. Ordered oldest
+ * first so a sweep that hits its limit makes progress on the worst offenders
+ * rather than the same recent ones every time.
+ */
+export async function staleReservations(
+  olderThanMs: number,
+  limit: number,
+  db: Db = pool,
+): Promise<PaymentRecord[]> {
+  if (!Number.isSafeInteger(olderThanMs) || olderThanMs < 0) {
+    throw new Error('olderThanMs must be a non-negative integer');
+  }
+  const { rows } = await db.query<RawPayment>(
+    `select * from payments
+      where status = 'created'
+        and created_at < now() - make_interval(secs => $1)
+      order by created_at asc
+      limit $2`,
+    [olderThanMs / 1000, limit],
+  );
+  return rows.map(toPayment);
 }
 
 function toPayment(raw: RawPayment): PaymentRecord {
