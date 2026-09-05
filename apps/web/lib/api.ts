@@ -42,3 +42,38 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
   return (await response.json()) as T;
 }
+
+export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(apiUrl(path), {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    throw new ApiError(
+      `Cannot reach the API at ${INTERNAL_BASE}. Is \`pnpm dev\` running? (${
+        err instanceof Error ? err.message : String(err)
+      })`,
+    );
+  }
+  if (!response.ok) {
+    let errorDetail = `${path} returned ${response.status} ${response.statusText}`;
+    try {
+      const data = (await response.json()) as { reason?: string; error?: string };
+      if (data?.reason) {
+        errorDetail = data.reason;
+      } else if (data?.error) {
+        errorDetail = data.error;
+      }
+    } catch {
+      // response might not be JSON
+    }
+    throw new ApiError(errorDetail, response.status);
+  }
+  return (await response.json()) as T;
+}
+

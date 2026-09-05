@@ -54,8 +54,10 @@ const port = Number(process.env.PORT ?? 3000);
  * ngrok URL when demoing, so the phone in the room can open it.
  */
 function publicBaseUrl(): string {
-  return (process.env.PUBLIC_BASE_URL ?? `http://localhost:${port}`).replace(/\/+$/, '');
+  const raw = (process.env.PUBLIC_BASE_URL ?? `http://localhost:${port}`).replace(/\/+$/, '');
+  return raw.replace(/\/webhooks(\/razorpay)?\/?$/, '');
 }
+
 
 function approvalTtlSeconds(): number {
   const raw = Number(process.env.APPROVAL_TTL_SECONDS ?? 900);

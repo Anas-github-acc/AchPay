@@ -58,6 +58,25 @@ export async function approvalRoutes(app: FastifyInstance, deps: CheckoutDeps): 
       return reply.code(410).send(settledPage(approval));
     });
 
+    // Compatibility redirects: if an approval link was generated with a trailing
+    // /webhooks/razorpay in PUBLIC_BASE_URL, redirect so the approval page opens.
+    scope.get('/webhooks/razorpay/approve/:token', async (request, reply) => {
+      const { token } = request.params as { token: string };
+      return reply.redirect(`/approve/${token}`);
+    });
+
+    scope.post('/webhooks/razorpay/approve/:token', async (request, reply) => {
+      const { token } = request.params as { token: string };
+      return reply.redirect(`/approve/${token}`, 307);
+    });
+
+    scope.get('/webhooks/razorpay/approvals/:token', async (request, reply) => {
+      const { token } = request.params as { token: string };
+      return reply.redirect(`/approvals/${token}`);
+    });
+
+
+
     scope.post('/approve/:token', async (request, reply) => {
       const { token } = request.params as { token: string };
       const action = (request.body as { action?: string } | undefined)?.action;
