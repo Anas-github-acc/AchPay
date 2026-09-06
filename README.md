@@ -5,9 +5,8 @@
 
   **Agentic Commerce Hub for Secure AI Payments**
 
-  An open, deterministic protocol that gives AI agents a wallet they cannot misuse.<br />
-  Built with cryptographically signed quotes, pure policy validation, database idempotency, and tamper-evident audit chains.
-
+  I built a system that lets an AI shop on your behalf, but it can never overspend, get tricked, or hide what it did — every decision is logged and provable.
+  
   <p align="center">
     <a href="#core-defense-layers"><strong>Defense in Depth</strong></a> •
     <a href="#quick-start"><strong>Quick Start</strong></a> •
@@ -29,7 +28,7 @@
 
 ## Overview
 
-Allowing an autonomous LLM to spend money is inherently risky. Traditional payment flows accept dynamic amounts from client code, leaving systems vulnerable to prompt injection, hallucinations, hallucinated prices, and runaway loops.
+Allowing your AI Agent to make payments on behalf of you is inherently risky. Traditional payment flows accept dynamic amounts from client code, leaving systems vulnerable to prompt injection, hallucinations, hallucinated prices, and runaway loops.
 
 **AchPay** resolves this by enforcing strict separation between **agent intent** and **financial execution**:
 
