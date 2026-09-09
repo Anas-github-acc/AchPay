@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Catalog, quotes, policy, ledger, payments, HTTP routes and the MCP server.",
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
