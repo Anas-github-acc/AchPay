@@ -7,3 +7,5 @@ dist/
 data/ingest-report.json
 data/adversarial-results.json
 *.tsbuildinfo
+
+supabase/.temp
