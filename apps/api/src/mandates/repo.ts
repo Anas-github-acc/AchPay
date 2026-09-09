@@ -21,11 +21,12 @@ export async function createMandate(
   }
   const { rows } = await db.query<RawMandate>(
     `insert into mandates
-       (id, user_ref, max_amount_paise, expires_at, status, provider_token, provider_customer_id)
-     values ($1, $2, $3, $4, 'active', $5, $6)
+       (id, owner_id, user_ref, max_amount_paise, expires_at, status, provider_token, provider_customer_id)
+     values ($1, $2, $3, $4, $5, 'active', $6, $7)
      returning *`,
     [
       `mnd_${randomUUID().replaceAll('-', '')}`,
+      input.owner_id ?? null,
       input.user_ref,
       input.max_amount_paise,
       new Date(input.expires_at).toISOString(),
@@ -42,16 +43,21 @@ export async function createMandate(
  * Headroom is not stored — it is `max_amount_paise - used_paise`, computed by
  * the caller so there is exactly one place it can drift from.
  */
-export async function listMandates(limit = 100, db: Db = pool): Promise<MandateRecord[]> {
+export async function listMandates(limit = 100, db: Db = pool, ownerId?: string): Promise<MandateRecord[]> {
   const { rows } = await db.query<RawMandate>(
-    'select * from mandates order by created_at desc limit $1',
-    [limit],
+    `select * from mandates
+      where ($2::uuid is null or owner_id = $2::uuid)
+      order by created_at desc limit $1`,
+    [limit, ownerId ?? null],
   );
   return rows.map(toMandate);
 }
 
-export async function getMandate(id: string, db: Db = pool): Promise<MandateRecord | undefined> {
-  const { rows } = await db.query<RawMandate>('select * from mandates where id = $1', [id]);
+export async function getMandate(id: string, db: Db = pool, ownerId?: string): Promise<MandateRecord | undefined> {
+  const { rows } = await db.query<RawMandate>(
+    `select * from mandates where id = $1 and ($2::uuid is null or owner_id = $2::uuid)`,
+    [id, ownerId ?? null],
+  );
   return rows[0] ? toMandate(rows[0]) : undefined;
 }
 
@@ -187,10 +193,12 @@ export async function setProviderToken(
   return rows[0] ? toMandate(rows[0]) : undefined;
 }
 
-export async function revokeMandate(id: string, db: Db = pool): Promise<MandateRecord | undefined> {
+export async function revokeMandate(id: string, db: Db = pool, ownerId?: string): Promise<MandateRecord | undefined> {
   const { rows } = await db.query<RawMandate>(
-    `update mandates set status = 'revoked' where id = $1 returning *`,
-    [id],
+    `update mandates set status = 'revoked'
+      where id = $1 and ($2::uuid is null or owner_id = $2::uuid)
+      returning *`,
+    [id, ownerId ?? null],
   );
   return rows[0] ? toMandate(rows[0]) : undefined;
 }

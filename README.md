@@ -173,6 +173,21 @@ pnpm verify:ledger
 pnpm reclaim
 ```
 
+## Production demo deployment
+
+The production dashboard uses one permanent Supabase Auth user rather than a
+signup flow. Provision it once with `pnpm demo:provision`. Every device signs
+into that same user and intentionally shares the same demo data. The browser
+stores only `{ state, user_id }` in localStorage, while actual session tokens
+remain secure, HttpOnly cookies.
+
+Deploy `apps/web` and `apps/api` as separate Vercel projects. Set the API
+project's Root Directory to `apps/api`; its Vercel entrypoint is
+`src/index.ts`. Apply files under `supabase/migrations/` with the Supabase CLI
+before enabling production auth. Vercel Cron is intentionally not configured:
+use cron-job.org to call `GET /internal/reclaim` with
+`Authorization: Bearer <CRON_SECRET>`.
+
 ---
 
 ## License

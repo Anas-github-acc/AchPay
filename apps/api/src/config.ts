@@ -115,6 +115,17 @@ export const config = {
     ? (process.env.TEST_DATABASE_URL ?? required('DATABASE_URL'))
     : required('DATABASE_URL'),
   redisUrl: required('REDIS_URL'),
+  supabase: {
+    url: process.env.SUPABASE_URL,
+    anonKey: process.env.SUPABASE_ANON_KEY,
+    serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    demoEmail: process.env.SUPABASE_DEMO_EMAIL,
+    demoPassword: process.env.SUPABASE_DEMO_PASSWORD,
+    demoUserId: process.env.SUPABASE_DEMO_USER_ID,
+  },
+  /** Production requires an anonymous Supabase identity on user-scoped routes. */
+  demoAuthRequired: process.env.DEMO_AUTH_REQUIRED === 'true',
+  cronSecret: process.env.CRON_SECRET,
   /** Tests namespace their Redis keys so a run never clobbers dev quotes. */
   redisPrefix: isTest ? 'test:' : '',
   quoteSigningSecret: required('QUOTE_SIGNING_SECRET'),

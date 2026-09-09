@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { SecurityReport } from '@storefront/shared';
 import { apiGet } from '../lib/api';
 import { LAYERS } from './security/layers';
+import { DemoButton } from './demo-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,9 +35,7 @@ export default async function Landing() {
               the agent may spend, refuses everything else, and writes down why.
             </p>
             <div className="hero-actions">
-              <Link className="button" href="https://github.com/Anas-github-acc/AchPay">
-                Try AchPay
-              </Link>
+              <DemoButton />
               <Link className="button button--secondary" href="/ledger">
                 Read the ledger
               </Link>
@@ -161,9 +160,7 @@ export default async function Landing() {
             the attacks, then read the rows they wrote.
           </p>
           <div className="hero-actions hero-actions--center">
-            <Link className="button" href="/security">
-              Try AchPay
-            </Link>
+            <DemoButton />
             <Link className="button button--secondary" href="/lab">
               Agent Lab
             </Link>

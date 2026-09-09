@@ -19,6 +19,7 @@
     "test:adversarial": "vitest run --root apps/api tests/adversarial",
     "verify:ledger": "tsx apps/api/scripts/verify-ledger.ts",
     "reclaim": "tsx apps/api/scripts/reclaim.ts",
+    "demo:provision": "tsx apps/api/scripts/provision-demo-user.ts",
     "smoke:razorpay": "tsx apps/api/scripts/razorpay-smoke.ts",
     "test:webhook-live": "tsx apps/api/scripts/webhook-live-test.ts",
     "test:autopay": "tsx apps/api/scripts/autopay-test.ts",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.9.2",
+    "supabase": "^2.117.0",
     "tsx": "^4.20.7",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"

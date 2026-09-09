@@ -2,6 +2,7 @@ import type { SecurityAttack, SecurityReport } from '@storefront/shared';
 import { apiGet, ApiError } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { LAYERS, UNCATALOGUED } from './layers';
+import { headers } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,10 @@ export default async function SecurityPage() {
   let report: SecurityReport | null = null;
   let error: string | null = null;
   try {
-    report = await apiGet<SecurityReport>('/security/report');
+    const incoming = await headers();
+    report = await apiGet<SecurityReport>('/security/report', {
+      cookie: incoming.get('cookie') ?? '',
+    });
   } catch (err) {
     error = err instanceof ApiError ? err.message : String(err);
   }

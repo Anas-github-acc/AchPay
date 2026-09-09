@@ -21,6 +21,9 @@ import { getPolicy } from '../policy/config.js';
 import { getPayment } from '../payments/repo.js';
 import type { CheckoutRequest } from '../checkout/types.js';
 import type { QuoteRequestItem } from '../quotes/types.js';
+import { createDemoSession } from '../auth/supabase.js';
+import { clearDemoCookies, requireDemoUser, resolveDemoUser, setDemoCookies } from '../auth/request.js';
+import { reclaimRoute } from './reclaim-route.js';
 
 export interface BuildAppOptions {
   logger?: boolean;
@@ -35,6 +38,29 @@ export interface BuildAppOptions {
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
   const app = Fastify({ logger: opts.logger ?? !config.isTest });
 
+  app.addHook('preHandler', async (request, reply) => {
+    if (!config.demoAuthRequired) return;
+    const path = request.url.split('?')[0] ?? '/';
+    const publicPath =
+      path === '/health' ||
+      path === '/demo/session' ||
+      path === '/products' ||
+      path.startsWith('/products/') ||
+      path === '/policy' ||
+      path === '/security/report' ||
+      path === '/.well-known/product-feed.json' ||
+      path.startsWith('/webhooks/') ||
+      path.startsWith('/approve/') ||
+      path.startsWith('/approvals/') ||
+      path.startsWith('/authorise/') ||
+      path.startsWith('/receipts/') ||
+      path === '/internal/reclaim';
+    if (!publicPath) {
+      const userId = await requireDemoUser(request, reply);
+      if (!userId) return;
+    }
+  });
+
   const catalog = getCatalog();
   const quotes = new QuoteService({
     catalog,
@@ -47,6 +73,27 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   app.decorate('quotes', quotes);
   app.decorate('quoteStore', quoteStore);
   app.decorate('adapter', adapter);
+
+  app.post('/demo/session', async (_request, reply) => {
+    const session = await createDemoSession();
+    setDemoCookies(reply, session.access_token, session.refresh_token);
+    return {
+      mode: 'demo',
+      user_id: session.user_id,
+      expires_in: session.expires_in,
+    };
+  });
+
+  app.get('/demo/session', async (request, reply) => {
+    const userId = await resolveDemoUser(request);
+    if (!userId) return reply.code(401).send({ error: 'DEMO_SESSION_REQUIRED' });
+    return { mode: 'demo', user_id: userId };
+  });
+
+  app.delete('/demo/session', async (_request, reply) => {
+    clearDemoCookies(reply);
+    return { ok: true };
+  });
 
   app.get('/health', async () => {
     const [db, cache] = await Promise.allSettled([
@@ -62,6 +109,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       redis: cache.status === 'fulfilled' ? 'up' : 'down',
     };
   });
+
+  await reclaimRoute(app);
 
   // The read path is split in two on purpose.
   //
@@ -167,6 +216,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       body.expires_at ??
       new Date(Date.now() + (body.ttl_hours ?? 24) * 3600_000).toISOString();
     const mandate = await createMandate({
+      owner_id: request.demoUserId,
       user_ref: body.user_ref,
       max_amount_paise: body.max_amount_paise!,
       expires_at: expiresAt,
@@ -176,7 +226,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   app.get('/mandates', async (request) => {
     const { limit } = request.query as { limit?: string };
-    const mandates = await listMandates(limit ? Number(limit) : 100);
+    const mandates = await listMandates(limit ? Number(limit) : 100, undefined, request.demoUserId);
     return {
       mandates: mandates.map((m) => ({
         ...m,
@@ -188,14 +238,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   app.get('/mandates/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const mandate = await getMandate(id);
+    const mandate = await getMandate(id, undefined, request.demoUserId);
     if (!mandate) return reply.code(404).send({ error: 'MANDATE_NOT_FOUND', mandate_id: id });
     return { ...mandate, headroom_paise: mandate.max_amount_paise - mandate.used_paise };
   });
 
   app.post('/mandates/:id/revoke', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const mandate = await revokeMandate(id);
+    const mandate = await revokeMandate(id, undefined, request.demoUserId);
     if (!mandate) return reply.code(404).send({ error: 'MANDATE_NOT_FOUND', mandate_id: id });
     return mandate;
   });

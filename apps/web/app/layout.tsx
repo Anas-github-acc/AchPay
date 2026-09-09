@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { NavLink } from './nav-link';
 import { BrandMark } from './brand-mark';
+import { DemoButton } from './demo-button';
 import './globals.css';
 
 export const metadata = {
@@ -61,9 +62,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 </NavLink>
               ))}
             </nav>
-            <Link className="button button--compact nav-try" href="https://github.com/Anas-github-acc/AchPay">
-              Try AchPay
-            </Link>
+            <DemoButton className="button button--compact nav-try" />
           </header>
           {children}
           <footer className="site-foot">

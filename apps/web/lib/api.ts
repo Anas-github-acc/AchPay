@@ -26,10 +26,10 @@ export class ApiError extends Error {
 }
 
 /** Always uncached: a dashboard that shows a stale ledger is worse than none. */
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<T>(path: string, headers?: HeadersInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(apiUrl(path), { cache: 'no-store' });
+    response = await fetch(apiUrl(path), { cache: 'no-store', headers });
   } catch (err) {
     throw new ApiError(
       `Cannot reach the API at ${INTERNAL_BASE}. Is \`pnpm dev\` running? (${
@@ -76,4 +76,3 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
   }
   return (await response.json()) as T;
 }
-
