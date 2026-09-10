@@ -394,7 +394,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
    */
   app.get('/security/report', async (_request, reply) => {
     try {
-      return getSecurityReport();
+      return await getSecurityReport();
     } catch (err) {
       return reply.code(503).send({
         error: 'SECURITY_REPORT_UNAVAILABLE',

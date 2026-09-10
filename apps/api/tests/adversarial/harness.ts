@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { it } from 'vitest';
 import { verifyChain } from '../../src/ledger/ledger.js';
+import { publishSecurityReport } from '../../src/security/report.js';
 import type { AdversarialReport, AttackResult } from '@storefront/shared';
 
 /**
@@ -127,5 +128,6 @@ export async function report(): Promise<void> {
     attacks: results,
   };
   writeFileSync(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+  await publishSecurityReport(payload);
   process.stdout.write(`${DIM}  results: ${outputPath}${RESET}\n\n`);
 }
