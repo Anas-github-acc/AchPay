@@ -1,4 +1,4 @@
-import type Redis from 'ioredis';
+import type { Redis } from 'ioredis';
 import { canonicalJson } from '../lib/canonical.js';
 import type { SignedQuote } from './types.js';
 

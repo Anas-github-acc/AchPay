@@ -120,7 +120,7 @@ export async function approvalRoutes(app: FastifyInstance, deps: CheckoutDeps): 
         return result;
       });
 
-      if (!claim.ok) {
+      if (claim.ok === false) {
         if (claim.code === 'NOT_FOUND') {
           return reply.code(404).send(notFoundPage('That approval link'));
         }

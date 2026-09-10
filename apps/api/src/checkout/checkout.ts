@@ -83,7 +83,7 @@ export async function checkout(
   // between gate and approval refuses instead of charging a total the approver
   // never saw. See QuoteService.verify.
   const verified = quotes.verify(candidate, undefined, { allowExpired: Boolean(approval) });
-  if (!verified.ok) {
+  if (verified.ok === false) {
     return {
       status: 'quote_invalid',
       error: verified.code,
