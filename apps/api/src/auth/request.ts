@@ -1,10 +1,14 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config.js';
-import { verifyDemoToken } from './supabase.js';
+import { pool } from '../db/pool.js';
+import { verifyDemoToken, verifySupabaseToken } from './supabase.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
     demoUserId?: string;
+    authRole?: 'merchant' | 'client';
+    authProvider?: 'google' | 'demo';
+    isDemo?: boolean;
   }
 }
 
@@ -29,6 +33,38 @@ export async function resolveDemoUser(request: FastifyRequest): Promise<string |
   return userId;
 }
 
+/** Resolves any authenticated Supabase user, including Google OAuth users. */
+export async function resolveUser(request: FastifyRequest): Promise<string | undefined> {
+  const header = request.headers.authorization;
+  const token = header?.startsWith('Bearer ')
+    ? header.slice('Bearer '.length).trim()
+    : cookieValue(request, 'supabase_access_token') ?? cookieValue(request, 'demo_access_token');
+  if (!token) return undefined;
+  const userId = await verifySupabaseToken(token);
+  request.demoUserId = userId;
+  const merchantDemo = userId !== undefined && userId === config.supabase.demoMerchantUserId;
+  const clientDemo = userId !== undefined && userId === config.supabase.demoClientUserId;
+  request.isDemo = merchantDemo || clientDemo;
+  request.authProvider = request.isDemo ? 'demo' : 'google';
+  if (merchantDemo || clientDemo) {
+    request.authRole = merchantDemo ? 'merchant' : 'client';
+  } else {
+    const role = await pool.query<{ role: 'merchant' | 'client'; is_demo: boolean; auth_provider: 'google' | 'demo' }>('select role, is_demo, auth_provider from user_roles where user_id = $1', [userId]);
+    request.authRole = role.rows[0]?.role;
+    request.isDemo = role.rows[0]?.is_demo ?? false;
+    request.authProvider = role.rows[0]?.auth_provider ?? 'google';
+  }
+  return userId;
+}
+
+export function requireRole(request: FastifyRequest, reply: FastifyReply, role: 'merchant' | 'client'): boolean {
+  if (request.authRole !== role) {
+    void reply.code(403).send({ error: 'ROLE_FORBIDDEN', required_role: role });
+    return false;
+  }
+  return true;
+}
+
 export async function requireDemoUser(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -36,6 +72,18 @@ export async function requireDemoUser(
   const userId = await resolveDemoUser(request);
   if (!userId && config.demoAuthRequired) {
     await reply.code(401).send({ error: 'DEMO_SESSION_REQUIRED' });
+    return undefined;
+  }
+  return userId;
+}
+
+export async function requireUser(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<string | undefined> {
+  const userId = await resolveUser(request);
+  if (!userId) {
+    await reply.code(401).send({ error: 'AUTHENTICATION_REQUIRED' });
     return undefined;
   }
   return userId;

@@ -43,6 +43,14 @@ export async function getShop(id: string, ownerId?: string): Promise<Shop | unde
   return rows[0];
 }
 
+export async function getOwnedShop(id: string, ownerId: string): Promise<Shop | undefined> {
+  const { rows } = await pool.query<Shop>(
+    `select id,name,slug,is_default,owner_id from shops where id=$1 and owner_id=$2`,
+    [id, ownerId],
+  );
+  return rows[0];
+}
+
 export async function createShop(input: CreateShopInput): Promise<Shop> {
   const id = `shop_${randomUUID().replaceAll('-', '')}`;
   const slug = `${input.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${id.slice(-6)}`;
@@ -56,9 +64,23 @@ export async function listProducts(shopId: string): Promise<Catalog> {
   return new Catalog(rows);
 }
 
-export async function upsertProduct(shopId: string, product: RawProduct): Promise<void> {
-  await pool.query(`insert into shop_products (shop_id,sku,title,description,price_paise,stock,category,source,flagged) values ($1,$2,$3,$4,$5,$6,$7,$8,false)
-    on conflict (shop_id,sku) do update set title=excluded.title,description=excluded.description,price_paise=excluded.price_paise,stock=excluded.stock,category=excluded.category,source=excluded.source,updated_at=now()`, [shopId, product.sku, product.title, product.description ?? null, product.price_paise, product.stock, product.category, product.source ?? 'verified']);
+export async function listProductPage(shopId: string, limit: number, offset: number): Promise<{ catalog: Catalog; hasMore: boolean }> {
+  const { rows } = await pool.query<Product>(
+    `select sku,title,description,price_paise,stock,category,source,flagged from shop_products where shop_id=$1 order by sku limit $2 offset $3`,
+    [shopId, limit + 1, offset],
+  );
+  return { catalog: new Catalog(rows.slice(0, limit)), hasMore: rows.length > limit };
+}
+
+export async function upsertProduct(shopId: string, product: RawProduct, previousSku?: string): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    if (previousSku && previousSku !== product.sku) await client.query('delete from shop_products where shop_id=$1 and sku=$2', [shopId, previousSku]);
+    await client.query(`insert into shop_products (shop_id,sku,title,description,price_paise,stock,category,source,flagged) values ($1,$2,$3,$4,$5,$6,$7,$8,false)
+      on conflict (shop_id,sku) do update set title=excluded.title,description=excluded.description,price_paise=excluded.price_paise,stock=excluded.stock,category=excluded.category,source=excluded.source,updated_at=now()`, [shopId, product.sku, product.title, product.description ?? null, product.price_paise, product.stock, product.category, product.source ?? 'verified']);
+    await client.query('commit');
+  } catch (error) { await client.query('rollback'); throw error; } finally { client.release(); }
 }
 
 export async function deleteProduct(shopId: string, sku: string): Promise<void> { await pool.query('delete from shop_products where shop_id=$1 and sku=$2', [shopId, sku]); }

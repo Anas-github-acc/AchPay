@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { NavLink } from './nav-link';
 import { BrandMark } from './brand-mark';
-import { DemoButton } from './demo-button';
 import './globals.css';
+import { AuthProvider } from './auth/auth-provider';
+import { AuthStatus } from './auth/auth-status';
+import { RoleNav } from './role-nav';
 
 export const metadata = {
   title: 'AchPay — Agentic Commerce Hub for secure AI payments',
@@ -48,24 +49,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <a className="skip-link" href="#main">
             Skip to content
           </a>
-          <header className="topbar">
-            <Link href="/" className="brand" aria-label="AchPay — home">
-              <BrandMark />
-              <span className="brand-name">
-                <strong>AchPay</strong>
-              </span>
-              <span className="brand-tag">Agentic Commerce Hub</span>
-            </Link>
-            <nav className="nav" aria-label="Sections">
-              {links.map((link) => (
-                <NavLink key={link.href} href={link.href}>
-                  {link.label}
-                </NavLink>
-              ))}
-            </nav>
-            <DemoButton className="button button--compact nav-try" />
-          </header>
-          {children}
+          <AuthProvider>
+            <header className="topbar">
+              <Link href="/" className="brand" aria-label="AchPay — home">
+                <BrandMark />
+                <span className="brand-name">
+                  <strong>AchPay</strong>
+                </span>
+                <span className="brand-tag">Agentic Commerce Hub</span>
+              </Link>
+              <RoleNav links={links} />
+              <AuthStatus />
+            </header>
+            {children}
+          </AuthProvider>
           <footer className="site-foot">
             <span>AchPay — an agentic commerce hub for secure AI payments.</span>
             <span className="mono">every amount is an integer number of paise</span>
@@ -73,13 +70,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {/* The phone navigation. Four sections, always all four visible, no
               hamburger — the same rule the desktop nav follows, moved to the
               thumb. Hidden above 640px, where .nav does the job. */}
-          <nav className="tabbar" aria-label="Sections">
-            {links.map((link) => (
-              <NavLink key={link.href} href={link.href} className="tabbar-link">
-                {link.short}
-              </NavLink>
-            ))}
-          </nav>
+          <RoleNav links={links} mobile />
         </div>
       </body>
     </html>

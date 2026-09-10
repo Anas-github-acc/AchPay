@@ -75,6 +75,9 @@ importers:
       '@storefront/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@supabase/supabase-js':
+        specifier: ^2.107.0
+        version: 2.107.0
       next:
         specifier: ^15.5.4
         version: 15.5.25(@types/node@24.13.3)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

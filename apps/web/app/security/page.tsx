@@ -1,10 +1,11 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import type { SecurityAttack, SecurityReport } from '@storefront/shared';
 import { apiGet, ApiError } from '../../lib/api';
 import { formatDateTime } from '../../lib/format';
 import { LAYERS, UNCATALOGUED } from './layers';
-import { headers } from 'next/headers';
-
-export const dynamic = 'force-dynamic';
+import { readCached, writeCached } from '../../lib/cache';
 
 function AttackCard({ attack }: { attack: SecurityAttack }) {
   const entry = attack.catalog;
@@ -40,17 +41,17 @@ function AttackCard({ attack }: { attack: SecurityAttack }) {
   );
 }
 
-export default async function SecurityPage() {
-  let report: SecurityReport | null = null;
-  let error: string | null = null;
-  try {
-    const incoming = await headers();
-    report = await apiGet<SecurityReport>('/security/report', {
-      cookie: incoming.get('cookie') ?? '',
-    });
-  } catch (err) {
-    error = err instanceof ApiError ? err.message : String(err);
-  }
+export default function SecurityPage() {
+  const [report, setReport] = useState<SecurityReport | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const cached = readCached<SecurityReport>('security-report');
+    if (cached) setReport(cached);
+    void apiGet<SecurityReport>('/security/report')
+      .then((fresh) => { setReport(fresh); writeCached('security-report', fresh); setError(null); })
+      .catch((err) => setError(err instanceof ApiError ? err.message : String(err)));
+  }, []);
 
   if (report === null) {
     return (

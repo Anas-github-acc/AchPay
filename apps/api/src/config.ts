@@ -124,6 +124,12 @@ export const config = {
     demoEmail: process.env.SUPABASE_DEMO_EMAIL,
     demoPassword: process.env.SUPABASE_DEMO_PASSWORD,
     demoUserId: process.env.SUPABASE_DEMO_USER_ID,
+    demoMerchantEmail: process.env.SUPABASE_DEMO_MERCHANT_EMAIL ?? process.env.SUPABASE_DEMO_EMAIL,
+    demoMerchantPassword: process.env.SUPABASE_DEMO_MERCHANT_PASSWORD ?? process.env.SUPABASE_DEMO_PASSWORD,
+    demoMerchantUserId: process.env.SUPABASE_DEMO_MERCHANT_USER_ID,
+    demoClientEmail: process.env.SUPABASE_DEMO_EMAIL,
+    demoClientPassword: process.env.SUPABASE_DEMO_PASSWORD,
+    demoClientUserId: process.env.SUPABASE_DEMO_USER_ID,
   },
   /** Production requires an anonymous Supabase identity on user-scoped routes. */
   demoAuthRequired: process.env.DEMO_AUTH_REQUIRED === 'true',

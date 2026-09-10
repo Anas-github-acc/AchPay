@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, ApiError } from '../../../lib/api';
 import { formatPaise } from '../../../lib/format';
+import { readCached, writeCached } from '../../../lib/cache';
 
 /**
  * Mandate authorisation, in the browser.
@@ -79,7 +80,9 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
 
   const load = useCallback(async () => {
     try {
-      setData(await apiGet<Authorisation>(`/authorise/${encodeURIComponent(orderRef)}`));
+      const fresh = await apiGet<Authorisation>(`/authorise/${encodeURIComponent(orderRef)}`);
+      setData(fresh);
+      writeCached(`authorise:${orderRef}`, fresh);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -87,6 +90,8 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
   }, [orderRef]);
 
   useEffect(() => {
+    const cached = readCached<Authorisation>(`authorise:${orderRef}`);
+    if (cached) setData(cached);
     void load();
   }, [load]);
 
@@ -154,7 +159,7 @@ export function AuthoriseView({ orderRef }: { orderRef: string }) {
     }
   }, [data, load]);
 
-  if (error) {
+  if (error && !data) {
     return (
       <main className="page" id="main">
         <div className="page-head">

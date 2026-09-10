@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { LedgerRow, VerifyChainResult } from '@storefront/shared';
 import { apiGet, ApiError } from '../../lib/api';
 import { formatPaise, formatTime } from '../../lib/format';
+import { readCached, writeCached } from '../../lib/cache';
 
 const POLL_MS = 3000;
 
@@ -54,6 +55,7 @@ export function LedgerView() {
         // Newest first: on a projector the interesting row is the one that just
         // landed, and nobody wants to watch a table scroll.
         setRows([...data.rows].sort((a, b) => b.seq - a.seq));
+        writeCached('ledger', data);
         setError(null);
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : String(err));
@@ -62,6 +64,11 @@ export function LedgerView() {
       }
     }
 
+    const cached = readCached<LedgerResponse>('ledger');
+    if (cached) {
+      setRows([...cached.rows].sort((a, b) => b.seq - a.seq));
+      setLoaded(true);
+    }
     void poll();
     const timer = setInterval(() => void poll(), POLL_MS);
     return () => {

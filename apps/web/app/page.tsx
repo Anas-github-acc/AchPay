@@ -1,10 +1,12 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import type { SecurityReport } from '@storefront/shared';
 import { apiGet } from '../lib/api';
 import { LAYERS } from './security/layers';
 import { DemoButton } from './demo-button';
-
-export const dynamic = 'force-dynamic';
+import { readCached, writeCached } from '../lib/cache';
 
 /**
  * The landing page.
@@ -15,13 +17,16 @@ export const dynamic = 'force-dynamic';
  * the real attack report rather than written into the copy — if the API is down
  * the band goes away rather than showing a number nobody ran.
  */
-export default async function Landing() {
-  let report: SecurityReport | null = null;
-  try {
-    report = await apiGet<SecurityReport>('/security/report');
-  } catch {
-    report = null;
-  }
+export default function Landing() {
+  const [report, setReport] = useState<SecurityReport | null>(null);
+
+  useEffect(() => {
+    const cached = readCached<SecurityReport>('security-report');
+    if (cached) setReport(cached);
+    void apiGet<SecurityReport>('/security/report')
+      .then((fresh) => { setReport(fresh); writeCached('security-report', fresh); })
+      .catch(() => undefined);
+  }, []);
 
   return (
     <main className="landing" id="main">
@@ -36,8 +41,8 @@ export default async function Landing() {
             </p>
             <div className="hero-actions">
               <DemoButton />
-              <Link className="button button--secondary" href="/ledger">
-                Read the ledger
+              <Link className="button button--secondary" href="/merchant/login">
+                Register as Merchant
               </Link>
             </div>
             <p className="hero-note">

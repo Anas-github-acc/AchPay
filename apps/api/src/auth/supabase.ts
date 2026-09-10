@@ -21,15 +21,18 @@ export interface DemoSession {
   refresh_token: string;
   expires_in: number;
   user_id: string;
+  role: 'merchant' | 'client';
 }
 
-export async function createDemoSession(): Promise<DemoSession> {
-  if (!config.supabase.demoEmail || !config.supabase.demoPassword) {
-    throw new Error('SUPABASE_DEMO_EMAIL and SUPABASE_DEMO_PASSWORD are required');
+export async function createDemoSession(role: 'merchant' | 'client' = 'client'): Promise<DemoSession> {
+  const email = role === 'merchant' ? config.supabase.demoMerchantEmail : config.supabase.demoClientEmail;
+  const password = role === 'merchant' ? config.supabase.demoMerchantPassword : config.supabase.demoClientPassword;
+  if (!email || !password) {
+    throw new Error(`Demo ${role} credentials are not configured`);
   }
   const { data, error } = await publicSupabase().auth.signInWithPassword({
-    email: config.supabase.demoEmail,
-    password: config.supabase.demoPassword,
+    email,
+    password,
   });
   if (error || !data.session || !data.user) {
     throw new Error(error?.message ?? 'Supabase did not return an anonymous session');
@@ -39,12 +42,18 @@ export async function createDemoSession(): Promise<DemoSession> {
     refresh_token: data.session.refresh_token,
     expires_in: data.session.expires_in ?? 3600,
     user_id: data.user.id,
+    role,
   };
 }
 
 export async function verifyDemoToken(token: string): Promise<string | undefined> {
+  const userId = await verifySupabaseToken(token);
+  if (config.supabase.demoUserId && userId !== config.supabase.demoUserId) return undefined;
+  return userId;
+}
+
+export async function verifySupabaseToken(token: string): Promise<string | undefined> {
   const { data, error } = await publicSupabase().auth.getUser(token);
   if (error || !data.user) return undefined;
-  if (config.supabase.demoUserId && data.user.id !== config.supabase.demoUserId) return undefined;
   return data.user.id;
 }

@@ -1,8 +1,10 @@
 import { LedgerView } from './ledger-view';
+import { requireWebAuth } from '../../lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export default function LedgerPage() {
+export default async function LedgerPage() {
+  await requireWebAuth('/ledger');
   return (
     <main className="page" id="main">
       <div className="page-head">

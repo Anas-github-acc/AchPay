@@ -23,9 +23,9 @@ import type { CheckoutRequest } from '../checkout/types.js';
 import type { QuoteRequestItem } from '../quotes/types.js';
 import type { RawProduct } from '../catalog/types.js';
 import { createDemoSession } from '../auth/supabase.js';
-import { clearDemoCookies, requireDemoUser, resolveDemoUser, setDemoCookies } from '../auth/request.js';
+import { clearDemoCookies, requireRole, requireUser, resolveDemoUser, resolveUser, setDemoCookies } from '../auth/request.js';
 import { reclaimRoute } from './reclaim-route.js';
-import { createShop, ensureDefaultShop, getShop, listProducts, listShops, upsertProduct, deleteProduct } from '../shops/repo.js';
+import { createShop, ensureDefaultShop, getOwnedShop, getShop, listProductPage, listProducts, listShops, upsertProduct, deleteProduct } from '../shops/repo.js';
 
 type RawProductBody = RawProduct;
 
@@ -43,14 +43,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const app = Fastify({ logger: opts.logger ?? !config.isTest });
 
   app.addHook('preHandler', async (request, reply) => {
-    if (!config.demoAuthRequired) return;
+    if (config.isTest) return;
     const path = request.url.split('?')[0] ?? '/';
     const publicPath =
       path === '/health' ||
       path === '/demo/session' ||
+      path === '/auth/session' ||
       path === '/products' ||
       path.startsWith('/products/') ||
-      path === '/shops' ||
       path === '/policy' ||
       path === '/security/report' ||
       path === '/.well-known/product-feed.json' ||
@@ -61,8 +61,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       path.startsWith('/receipts/') ||
       path === '/internal/reclaim';
     if (!publicPath) {
-      const userId = await requireDemoUser(request, reply);
+      const userId = await requireUser(request, reply);
       if (!userId) return;
+      if ((path === '/merchant/account' || path === '/shops' || path.startsWith('/shops/')) && !requireRole(request, reply, 'merchant')) return;
+      if ((path === '/ledger' || path.startsWith('/ledger/') || path === '/mandates' || path.startsWith('/mandates/')) && !requireRole(request, reply, 'client')) return;
     }
   });
 
@@ -86,14 +88,62 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   app.decorate('quoteStore', quoteStore);
   app.decorate('adapter', adapter);
 
-  app.post('/demo/session', async (_request, reply) => {
-    const session = await createDemoSession();
+  app.post('/demo/session', async (request, reply) => {
+    const role = ((request.body as { role?: string } | undefined)?.role ?? 'client') as 'merchant' | 'client';
+    if (role !== 'merchant' && role !== 'client') return reply.code(400).send({ error: 'INVALID_ROLE' });
+    const session = await createDemoSession(role);
+    await pool.query(
+      `insert into user_roles (user_id, role, is_demo, auth_provider)
+       values ($1, $2, true, 'demo')
+       on conflict (user_id) do update set role = excluded.role, is_demo = true, auth_provider = 'demo', updated_at = now()`,
+      [session.user_id, role],
+    );
+    if (role === 'merchant') {
+      await pool.query(
+        `insert into merchant_accounts (user_id, username, email, is_demo)
+         values ($1, $2, $3, true)
+         on conflict (user_id) do nothing`,
+        [session.user_id, 'merchant_demo', config.supabase.demoMerchantEmail],
+      );
+    }
     setDemoCookies(reply, session.access_token, session.refresh_token);
     return {
       mode: 'demo',
       user_id: session.user_id,
       expires_in: session.expires_in,
+      role: session.role,
+      isDemo: true,
+      authProvider: 'demo',
     };
+  });
+
+  app.get('/auth/session', async (request) => {
+    const userId = await resolveUser(request);
+    if (!userId) return { isAuthenticated: false, role: null, isDemo: false, authProvider: null, user: null };
+    return { isAuthenticated: true, role: request.authRole ?? null, isDemo: request.isDemo ?? false, authProvider: request.authProvider ?? 'google', user: { id: userId } };
+  });
+
+  app.post('/auth/role', async (request, reply) => {
+    const userId = await requireUser(request, reply);
+    if (!userId) return;
+    const role = (request.body as { role?: string } | undefined)?.role;
+    if (role !== 'merchant' && role !== 'client') return reply.code(400).send({ error: 'INVALID_ROLE' });
+    await pool.query(
+      `insert into user_roles (user_id, role, is_demo, auth_provider)
+       values ($1, $2, false, 'google')
+       on conflict (user_id) do update set role = excluded.role, updated_at = now()`,
+      [userId, role],
+    );
+    if (role === 'merchant') {
+      await pool.query(
+        `insert into merchant_accounts (user_id, username, email, is_demo)
+         values ($1, $2, $3, false)
+         on conflict (user_id) do nothing`,
+        [userId, `merchant_${userId.slice(0, 10)}`, `user_${userId.slice(0, 10)}@oauth.local`],
+      );
+    }
+    request.authRole = role;
+    return { user_id: userId, role, isDemo: false, authProvider: 'google' };
   });
 
   app.get('/demo/session', async (request, reply) => {
@@ -135,27 +185,32 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
 
   app.get('/shops/:shop_id/products', async (request, reply) => {
     const { shop_id } = request.params as { shop_id: string };
-    const shop = await getShop(shop_id, request.demoUserId);
+    const shop = request.demoUserId ? await getOwnedShop(shop_id, request.demoUserId) : undefined;
     if (!shop) return reply.code(404).send({ error: 'SHOP_NOT_FOUND' });
-    const fresh = await listProducts(shop_id); shopCatalogs.set(shop_id, fresh);
-    const q = request.query as Record<string, string | undefined>;
-    const items = fresh.search({ q: q.q, category: q.category, max_price_paise: q.max_price_paise ? Number(q.max_price_paise) : undefined, limit: q.limit ? Number(q.limit) : undefined });
-    return { shop, items: items.map(toListView), count: items.length };
+    const query = request.query as Record<string, string | undefined>;
+    const limit = Math.min(Math.max(Number(query.limit ?? 25) || 25, 1), 100);
+    const offset = Math.max(Number(query.offset ?? 0) || 0, 0);
+    const page = await listProductPage(shop_id, limit, offset);
+    const fresh = page.catalog;
+    const items = fresh.all();
+    // This is a merchant-owned management endpoint. The public/agent catalog
+    // remains on the redacted list/detail views below.
+    return { shop, items, count: items.length, has_more: page.hasMore, offset, limit };
   });
 
   app.post('/shops/:shop_id/products', async (request, reply) => {
     const { shop_id } = request.params as { shop_id: string };
-    const shop = await getShop(shop_id, request.demoUserId);
+    const shop = request.demoUserId ? await getOwnedShop(shop_id, request.demoUserId) : undefined;
     if (!shop) return reply.code(404).send({ error: 'SHOP_NOT_FOUND' });
-    const body = request.body as RawProductBody | undefined;
+    const body = request.body as (RawProductBody & { previous_sku?: string }) | undefined;
     if (!body?.sku || !body.title || !body.category || !Number.isSafeInteger(body.price_paise) || !Number.isSafeInteger(body.stock) || body.price_paise < 0 || body.stock < 0) return reply.code(400).send({ error: 'BAD_REQUEST', reason: 'sku, title, category, integer price_paise and integer stock are required' });
-    await upsertProduct(shop_id, body); shopCatalogs.set(shop_id, await listProducts(shop_id));
-    return reply.code(201).send(toListView(shopCatalogs.get(shop_id)!.require(body.sku)));
+    await upsertProduct(shop_id, body, body.previous_sku); shopCatalogs.set(shop_id, await listProducts(shop_id));
+    return reply.code(201).send(shopCatalogs.get(shop_id)!.require(body.sku));
   });
 
   app.delete('/shops/:shop_id/products/:sku', async (request, reply) => {
     const { shop_id, sku } = request.params as { shop_id: string; sku: string };
-    const shop = await getShop(shop_id, request.demoUserId);
+    const shop = request.demoUserId ? await getOwnedShop(shop_id, request.demoUserId) : undefined;
     if (!shop) return reply.code(404).send({ error: 'SHOP_NOT_FOUND' });
     await deleteProduct(shop_id, sku); shopCatalogs.set(shop_id, await listProducts(shop_id));
     return { ok: true };

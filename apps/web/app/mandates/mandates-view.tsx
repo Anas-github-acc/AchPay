@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import type { MandateRecord } from '@storefront/shared';
 import { apiGet, apiPost, ApiError } from '../../lib/api';
 import { formatPaise, formatDateTime, relativeTo } from '../../lib/format';
+import { readCached, writeCached } from '../../lib/cache';
 
 export interface MandateView extends MandateRecord {
   headroom_paise: number;
@@ -62,6 +63,7 @@ export function MandatesView({ initialMandates, initialError }: MandatesViewProp
     try {
       const data = await apiGet<MandatesResponse>('/mandates?limit=50');
       setMandates(data.mandates ?? []);
+      writeCached('mandates', data);
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -69,6 +71,12 @@ export function MandatesView({ initialMandates, initialError }: MandatesViewProp
       setRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    const cached = readCached<MandatesResponse>('mandates');
+    if (cached) setMandates(cached.mandates ?? []);
+    void refreshList();
+  }, []);
 
   async function handleCreateMandate(e: FormEvent) {
     e.preventDefault();
@@ -100,6 +108,7 @@ export function MandatesView({ initialMandates, initialError }: MandatesViewProp
       };
 
       setMandates((prev) => [newView, ...prev]);
+      writeCached('mandates', { mandates: [newView, ...mandates], count: mandates.length + 1 });
       setUserRef('');
       setAmountRupees('500');
       setTtlHours(24);
@@ -129,6 +138,7 @@ export function MandatesView({ initialMandates, initialError }: MandatesViewProp
             : m,
         ),
       );
+      writeCached('mandates', { mandates: mandates.map((m) => m.id === idToRevoke ? { ...m, status: updated.status } : m), count: mandates.length });
       setBanner(`Mandate ${idToRevoke} revoked successfully.`);
       if (fromPanel) {
         setSelectedRevokeId('');
