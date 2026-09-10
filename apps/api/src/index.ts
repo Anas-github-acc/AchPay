@@ -1,7 +1,13 @@
+import Fastify from 'fastify';
 import { buildApp } from './http/app.js';
 
-// Vercel discovers this conventional Fastify entrypoint and adapts the
-// listener into a Function. Keep database migrations and local-only background
-// loops in http/server.ts; they are not part of the serverless entrypoint.
+// Vercel's Fastify detector expects the recognized entrypoint
+// itself to import the fastify package.
+void Fastify;
+
 const app = await buildApp();
-await app.listen({ port: 3000 });
+
+await app.listen({
+  port: Number(process.env.PORT ?? 3000),
+  host: '0.0.0.0',
+});
