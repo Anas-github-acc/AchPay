@@ -66,14 +66,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     }
   });
 
-  const catalog = getCatalog();
   await ensureDefaultShop();
   const shopCatalogs = new Map<string, Catalog>();
   for (const shop of await listShops()) shopCatalogs.set(shop.id, await listProducts(shop.id));
-  // Keep the existing test seam and make the shared shop the process default;
-  // production requests are still backed by the DB-loaded catalog above, while
-  // tests that swap getCatalog() continue to exercise their intended fixture.
-  shopCatalogs.set('shop_achcoffeezone', catalog);
+  // The JSON catalog is only retained as a test fixture seam. Production uses
+  // the DB-loaded shared shop exclusively.
+  const catalog = config.isTest ? getCatalog() : shopCatalogs.get('shop_achcoffeezone') ?? new Catalog([]);
+  if (config.isTest) shopCatalogs.set('shop_achcoffeezone', catalog);
   const quotes = new QuoteService({
     catalog,
     catalogForShop: (shopId) => shopCatalogs.get(shopId),
@@ -116,8 +115,8 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     return {
       status: 'ok',
       catalog_items: catalog.size,
-      catalog_flagged: catalog.report.items_flagged,
-      catalog_quarantined: catalog.report.items_quarantined,
+      catalog_flagged: catalog.flaggedCount,
+      catalog_quarantined: config.isTest ? catalog.report.items_quarantined : 0,
       postgres: db.status === 'fulfilled' ? 'up' : 'down',
       redis: cache.status === 'fulfilled' ? 'up' : 'down',
     };

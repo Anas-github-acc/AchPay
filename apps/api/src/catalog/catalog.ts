@@ -6,7 +6,6 @@ import type { IngestReport, Product, ProductQuery, RawProduct } from './types.js
 
 const dataDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'data');
 const defaultCatalogPath = join(dataDir, 'catalog.json');
-const defaultReportPath = join(dataDir, 'ingest-report.json');
 
 /** An empty report, for a Catalog built in memory rather than loaded from disk. */
 function noReport(itemCount: number, flagged: number): IngestReport {
@@ -22,7 +21,7 @@ function noReport(itemCount: number, flagged: number): IngestReport {
 }
 
 export interface LoadCatalogOptions {
-  /** Where to write the ingest report. `null` writes nothing (used by tests). */
+  /** Optional explicit report destination for offline ingest tooling/tests. */
   reportPath?: string | null;
   /** Suppress the boot summary line. */
   quiet?: boolean;
@@ -58,24 +57,24 @@ export class Catalog {
   }
 
   /**
-   * The ingest path. Reads the file, sanitises and flags it, writes the report,
-   * and prints the one line that tells an operator whether anything tried
-   * something today.
+   * Offline ingest path. Reads a file, sanitises and flags it, and optionally
+   * writes a report when an explicit reportPath is supplied. Runtime catalog
+   * loading is DB-backed; this remains for bootstrap tooling and tests.
    */
   static fromFile(path: string = defaultCatalogPath, opts: LoadCatalogOptions = {}): Catalog {
     const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
     const { items, report } = sanitiseCatalog(parsed, { source: path });
     const catalog = new Catalog(items, report);
 
-    const reportPath = opts.reportPath === undefined ? defaultReportPath : opts.reportPath;
-    if (reportPath !== null) {
+    const reportPath = opts.reportPath;
+    if (reportPath) {
       writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
     }
     if (!opts.quiet) {
       console.log(
         `catalog: ${report.items_loaded} items loaded, ${report.items_flagged} flagged` +
           (report.items_quarantined > 0 ? `, ${report.items_quarantined} quarantined` : '') +
-          (reportPath === null ? '' : ` (report: ${reportPath})`),
+          (reportPath ? ` (report: ${reportPath})` : ''),
       );
     }
     return catalog;
@@ -193,7 +192,7 @@ export function getCatalog(): Catalog {
   const isTest = process.env.NODE_ENV === 'test' || process.env.VITEST === 'true';
   cached ??= Catalog.fromFile(defaultCatalogPath, {
     quiet: isTest,
-    reportPath: isTest ? null : undefined,
+    reportPath: null,
   });
   return cached;
 }
@@ -203,4 +202,4 @@ export function setCatalog(catalog: Catalog | undefined): void {
   cached = catalog;
 }
 
-export { defaultCatalogPath, defaultReportPath };
+export { defaultCatalogPath };
