@@ -114,7 +114,9 @@ export const config = {
   databaseUrl: isTest
     ? (process.env.TEST_DATABASE_URL ?? required('DATABASE_URL'))
     : required('DATABASE_URL'),
-  redisUrl: required('REDIS_URL'),
+  redisUrl: process.env.REDIS_URL,
+  upstashRedisRestUrl: process.env.UPSTASH_REDIS_REST_URL,
+  upstashRedisRestToken: process.env.UPSTASH_REDIS_REST_TOKEN,
   supabase: {
     url: process.env.SUPABASE_URL,
     anonKey: process.env.SUPABASE_ANON_KEY,

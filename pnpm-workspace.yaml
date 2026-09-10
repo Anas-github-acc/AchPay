@@ -1,6 +1,9 @@
 packages:
-  - 'apps/*'
-  - 'packages/*'
+  - apps/*
+  - packages/*
 
 allowBuilds:
-  esbuild: false
+  esbuild: true
+
+onlyBuiltDependencies:
+  - esbuild

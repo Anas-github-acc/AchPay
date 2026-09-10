@@ -1,4 +1,4 @@
-import type { Redis } from 'ioredis';
+import type { RedisLike } from '../redis.js';
 import { canonicalJson } from '../lib/canonical.js';
 import type { SignedQuote } from './types.js';
 
@@ -13,7 +13,7 @@ export const EXPIRY_GRACE_SECONDS = 300;
 
 export class QuoteStore {
   constructor(
-    private readonly redis: Redis,
+    private readonly redis: RedisLike,
     private readonly ttlSeconds: number,
   ) {}
 
@@ -25,8 +25,7 @@ export class QuoteStore {
     await this.redis.set(
       this.key(quote.quote_id),
       canonicalJson(quote),
-      'EX',
-      this.ttlSeconds + EXPIRY_GRACE_SECONDS,
+      { ex: this.ttlSeconds + EXPIRY_GRACE_SECONDS },
     );
   }
 
