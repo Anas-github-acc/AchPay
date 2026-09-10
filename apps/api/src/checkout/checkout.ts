@@ -467,7 +467,10 @@ async function reQuote(
   const lines = (candidate as SignedQuote | undefined)?.lines;
   if (!Array.isArray(lines) || lines.length === 0) return {};
   try {
-    const fresh = quotes.create(lines.map((line) => ({ sku: line.sku, qty: line.qty })));
+    const fresh = quotes.create(
+      lines.map((line) => ({ sku: line.sku, qty: line.qty })),
+      (candidate as SignedQuote).shop_id,
+    );
     await store.put(fresh);
     return { new_quote: fresh };
   } catch {

@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { config } from '../config.js';
-import { getCatalog } from '../catalog/catalog.js';
+import { Catalog, getCatalog } from '../catalog/catalog.js';
 import { UnknownSkuError } from '../catalog/catalog.js';
 import { toDetailView, toListView } from '../catalog/views.js';
 import { QuoteService, InvalidQuoteRequestError } from '../quotes/service.js';
@@ -21,9 +21,13 @@ import { getPolicy } from '../policy/config.js';
 import { getPayment } from '../payments/repo.js';
 import type { CheckoutRequest } from '../checkout/types.js';
 import type { QuoteRequestItem } from '../quotes/types.js';
+import type { RawProduct } from '../catalog/types.js';
 import { createDemoSession } from '../auth/supabase.js';
 import { clearDemoCookies, requireDemoUser, resolveDemoUser, setDemoCookies } from '../auth/request.js';
 import { reclaimRoute } from './reclaim-route.js';
+import { createShop, ensureDefaultShop, getShop, listProducts, listShops, upsertProduct, deleteProduct } from '../shops/repo.js';
+
+type RawProductBody = RawProduct;
 
 export interface BuildAppOptions {
   logger?: boolean;
@@ -46,6 +50,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       path === '/demo/session' ||
       path === '/products' ||
       path.startsWith('/products/') ||
+      path === '/shops' ||
       path === '/policy' ||
       path === '/security/report' ||
       path === '/.well-known/product-feed.json' ||
@@ -62,8 +67,16 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   const catalog = getCatalog();
+  await ensureDefaultShop();
+  const shopCatalogs = new Map<string, Catalog>();
+  for (const shop of await listShops()) shopCatalogs.set(shop.id, await listProducts(shop.id));
+  // Keep the existing test seam and make the shared shop the process default;
+  // production requests are still backed by the DB-loaded catalog above, while
+  // tests that swap getCatalog() continue to exercise their intended fixture.
+  shopCatalogs.set('shop_achcoffeezone', catalog);
   const quotes = new QuoteService({
     catalog,
+    catalogForShop: (shopId) => shopCatalogs.get(shopId),
     secret: config.quoteSigningSecret,
     ttlSeconds: config.quoteTtlSeconds,
   });
@@ -110,6 +123,45 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     };
   });
 
+  app.get('/shops', async (request) => ({ shops: await listShops(request.demoUserId) }));
+
+  app.post('/merchant/account', async (request, reply) => {
+    const body = request.body as { name?: string; key_id?: string; key_secret?: string; webhook_secret?: string } | undefined;
+    if (!request.demoUserId) return reply.code(401).send({ error: 'DEMO_SESSION_REQUIRED' });
+    if (!body?.name?.trim()) return reply.code(400).send({ error: 'BAD_REQUEST', reason: 'name is required' });
+    const shop = await createShop({ name: body.name, owner_id: request.demoUserId, key_id: body.key_id, key_secret: body.key_secret, webhook_secret: body.webhook_secret });
+    shopCatalogs.set(shop.id, new Catalog([]));
+    return reply.code(201).send({ merchant: { id: request.demoUserId }, shop });
+  });
+
+  app.get('/shops/:shop_id/products', async (request, reply) => {
+    const { shop_id } = request.params as { shop_id: string };
+    const shop = await getShop(shop_id, request.demoUserId);
+    if (!shop) return reply.code(404).send({ error: 'SHOP_NOT_FOUND' });
+    const fresh = await listProducts(shop_id); shopCatalogs.set(shop_id, fresh);
+    const q = request.query as Record<string, string | undefined>;
+    const items = fresh.search({ q: q.q, category: q.category, max_price_paise: q.max_price_paise ? Number(q.max_price_paise) : undefined, limit: q.limit ? Number(q.limit) : undefined });
+    return { shop, items: items.map(toListView), count: items.length };
+  });
+
+  app.post('/shops/:shop_id/products', async (request, reply) => {
+    const { shop_id } = request.params as { shop_id: string };
+    const shop = await getShop(shop_id, request.demoUserId);
+    if (!shop) return reply.code(404).send({ error: 'SHOP_NOT_FOUND' });
+    const body = request.body as RawProductBody | undefined;
+    if (!body?.sku || !body.title || !body.category || !Number.isSafeInteger(body.price_paise) || !Number.isSafeInteger(body.stock) || body.price_paise < 0 || body.stock < 0) return reply.code(400).send({ error: 'BAD_REQUEST', reason: 'sku, title, category, integer price_paise and integer stock are required' });
+    await upsertProduct(shop_id, body); shopCatalogs.set(shop_id, await listProducts(shop_id));
+    return reply.code(201).send(toListView(shopCatalogs.get(shop_id)!.require(body.sku)));
+  });
+
+  app.delete('/shops/:shop_id/products/:sku', async (request, reply) => {
+    const { shop_id, sku } = request.params as { shop_id: string; sku: string };
+    const shop = await getShop(shop_id, request.demoUserId);
+    if (!shop) return reply.code(404).send({ error: 'SHOP_NOT_FOUND' });
+    await deleteProduct(shop_id, sku); shopCatalogs.set(shop_id, await listProducts(shop_id));
+    return { ok: true };
+  });
+
   await reclaimRoute(app);
 
   // The read path is split in two on purpose.
@@ -124,22 +176,25 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // call it.
   app.get('/products', async (request) => {
     const q = request.query as Record<string, string | undefined>;
+    const selectedShop = q.shop_id ?? 'shop_achcoffeezone';
+    const selectedCatalog = shopCatalogs.get(selectedShop) ?? catalog;
     const maxPrice = q.max_price_paise === undefined ? undefined : Number(q.max_price_paise);
     if (maxPrice !== undefined && !Number.isSafeInteger(maxPrice)) {
       return { error: 'BAD_REQUEST', reason: 'max_price_paise must be an integer' };
     }
-    const items = catalog.search({
+    const items = selectedCatalog.search({
       q: q.q,
       category: q.category,
       max_price_paise: maxPrice,
       limit: q.limit === undefined ? undefined : Number(q.limit),
     });
-    return { items: items.map(toListView), count: items.length };
+    return { shop_id: selectedShop, items: items.map(toListView), count: items.length };
   });
 
   app.get('/products/:sku/details', async (request, reply) => {
     const { sku } = request.params as { sku: string };
-    const product = catalog.get(sku);
+    const q = request.query as { shop_id?: string };
+    const product = (shopCatalogs.get(q.shop_id ?? 'shop_achcoffeezone') ?? catalog).get(sku);
     if (!product) {
       return reply.code(404).send({ error: 'UNKNOWN_SKU', reason: `Unknown sku: ${sku}`, sku });
     }
@@ -172,13 +227,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   });
 
   app.post('/quotes', async (request, reply) => {
-    const body = request.body as { items?: QuoteRequestItem[] } | undefined;
+    const body = request.body as { items?: QuoteRequestItem[]; shop_id?: string } | undefined;
     try {
       // Only sku and qty are read off the body. Any price the caller sends is
       // ignored outright — prices come from the catalog.
       const items = (body?.items ?? []).map((item) => ({ sku: item?.sku, qty: item?.qty })) as
         QuoteRequestItem[];
-      const quote = quotes.create(items);
+      const quote = quotes.create(items, body?.shop_id ?? 'shop_achcoffeezone');
       await quoteStore.put(quote);
       return quote;
     } catch (err) {

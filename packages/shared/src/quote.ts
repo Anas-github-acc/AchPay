@@ -27,6 +27,8 @@ export interface QuoteLine {
 /** A quote before it is signed. `signature` covers exactly these fields. */
 export interface UnsignedQuote {
   quote_id: string;
+  /** The shop whose catalog priced this quote. Older quotes may omit it. */
+  shop_id?: string;
   currency: 'INR';
   lines: QuoteLine[];
   total_paise: number;

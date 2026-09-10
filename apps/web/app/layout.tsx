@@ -22,6 +22,7 @@ export const viewport = {
 
 /** `short` is the tab-bar label: four of these sit side by side on a 360px phone. */
 const links = [
+  { href: '/shops', label: 'Shops', short: 'Shops' },
   { href: '/security', label: 'Attack log', short: 'Attacks' },
   { href: '/ledger', label: 'Ledger', short: 'Ledger' },
   { href: '/mandates', label: 'Mandates', short: 'Mandates' },

@@ -14,6 +14,7 @@ import type {
 
 export interface QuoteServiceOptions {
   catalog: Catalog;
+  catalogForShop?: (shopId: string) => Catalog | undefined;
   secret: string;
   ttlSeconds: number;
   /** Injectable clock so expiry is testable without sleeping. */
@@ -22,12 +23,14 @@ export interface QuoteServiceOptions {
 
 export class QuoteService {
   private readonly catalog: Catalog;
+  private readonly catalogForShop?: (shopId: string) => Catalog | undefined;
   private readonly secret: string;
   readonly ttlSeconds: number;
   private readonly now: () => Date;
 
   constructor(opts: QuoteServiceOptions) {
     this.catalog = opts.catalog;
+    this.catalogForShop = opts.catalogForShop;
     this.secret = opts.secret;
     this.ttlSeconds = opts.ttlSeconds;
     this.now = opts.now ?? (() => new Date());
@@ -39,7 +42,7 @@ export class QuoteService {
    * The request body supplies sku and qty only. There is no code path by which
    * a caller-supplied price reaches a quote — that is the whole point.
    */
-  create(items: QuoteRequestItem[]): SignedQuote {
+  create(items: QuoteRequestItem[], shopId?: string): SignedQuote {
     if (!Array.isArray(items) || items.length === 0) {
       throw new InvalidQuoteRequestError('items must be a non-empty array');
     }
@@ -55,9 +58,11 @@ export class QuoteService {
       merged.set(item.sku, (merged.get(item.sku) ?? 0) + item.qty);
     }
 
+    const catalog = shopId && this.catalogForShop ? this.catalogForShop(shopId) : this.catalog;
+    if (!catalog) throw new InvalidQuoteRequestError(`Unknown shop: ${shopId}`);
     const lines: QuoteLine[] = [];
     for (const [sku, qty] of merged) {
-      const product = this.catalog.require(sku);
+      const product = catalog.require(sku);
       lines.push({
         sku: product.sku,
         title: product.title,
@@ -65,7 +70,7 @@ export class QuoteService {
         qty,
         unit_price_paise: product.price_paise,
         line_total_paise: product.price_paise * qty,
-        category_median_paise: this.catalog.categoryMedianPaise(product.category),
+        category_median_paise: catalog.categoryMedianPaise(product.category),
       });
     }
     lines.sort((a, b) => a.sku.localeCompare(b.sku));
@@ -73,6 +78,7 @@ export class QuoteService {
     const issuedAt = this.now();
     const unsigned: UnsignedQuote = {
       quote_id: `qt_${randomUUID().replaceAll('-', '')}`,
+      ...(shopId ? { shop_id: shopId } : {}),
       currency: 'INR',
       lines,
       total_paise: sumPaise(lines),
@@ -104,6 +110,8 @@ export class QuoteService {
     const shapeError = checkShape(candidate);
     if (shapeError) return { ok: false, code: 'QUOTE_MALFORMED', reason: shapeError };
     const quote = candidate as SignedQuote;
+    const catalog = quote.shop_id && this.catalogForShop ? this.catalogForShop(quote.shop_id) : this.catalog;
+    if (!catalog) return { ok: false, code: 'QUOTE_STALE', reason: 'The selected shop no longer exists' };
 
     if (!verifySignature(quote, this.secret)) {
       return {
@@ -128,7 +136,7 @@ export class QuoteService {
     const deltas: StaleLineDelta[] = [];
     const medianDrift: MedianDrift[] = [];
     for (const line of quote.lines) {
-      const product = this.catalog.get(line.sku);
+      const product = catalog.get(line.sku);
       if (!product) {
         deltas.push({
           sku: line.sku,
@@ -140,7 +148,7 @@ export class QuoteService {
         });
         continue;
       }
-      const currentMedian = this.catalog.categoryMedianPaise(product.category);
+      const currentMedian = catalog.categoryMedianPaise(product.category);
       if (currentMedian !== line.category_median_paise) {
         medianDrift.push({
           sku: line.sku,

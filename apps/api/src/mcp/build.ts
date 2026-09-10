@@ -83,6 +83,16 @@ export function createMcpServer(): McpServer {
   );
 
   server.registerTool(
+    'list_shops',
+    {
+      title: 'List shops',
+      description: 'List shops available to the user. Always ask which shop they want before browsing or buying when more than one is available. AchCaffeeZone is the shared test shop.',
+      inputSchema: {},
+    },
+    async () => result(unwrap(await apiGet('/shops'))),
+  );
+
+  server.registerTool(
     'search_products',
     {
       title: 'Search products',
@@ -111,10 +121,11 @@ export function createMcpServer(): McpServer {
           .optional()
           .describe('Upper bound on unit price, integer paise. ₹200 is 20000.'),
         limit: z.number().int().positive().max(100).optional().describe('Max items to return.'),
+        shop_id: z.string().min(1).optional().describe('Shop id from list_shops. Defaults to AchCaffeeZone.'),
       },
     },
-    async ({ query: q, category, max_price_paise, limit }) =>
-      result(unwrap(await apiGet(`/products${query({ q, category, max_price_paise, limit })}`))),
+    async ({ query: q, category, max_price_paise, limit, shop_id }) =>
+      result(unwrap(await apiGet(`/products${query({ q, category, max_price_paise, limit, shop_id })}`))),
   );
 
   server.registerTool(
@@ -140,9 +151,10 @@ export function createMcpServer(): McpServer {
       ].join('\n'),
       inputSchema: {
         sku: z.string().min(1).describe('Exact catalog sku, e.g. "CHAI-250".'),
+        shop_id: z.string().min(1).optional().describe('Shop id from list_shops. Defaults to AchCaffeeZone.'),
       },
     },
-    async ({ sku }) => result(unwrap(await apiGet(`/products/${encodeURIComponent(sku)}/details`))),
+    async ({ sku, shop_id }) => result(unwrap(await apiGet(`/products/${encodeURIComponent(sku)}/details${query({ shop_id })}`))),
   );
 
   server.registerTool(
@@ -175,9 +187,10 @@ export function createMcpServer(): McpServer {
           )
           .min(1)
           .describe('The basket. Skus and quantities only — never a price.'),
+        shop_id: z.string().min(1).optional().describe('Shop id from list_shops. Defaults to AchCaffeeZone.'),
       },
     },
-    async ({ items }) => result(unwrap(await apiPost('/quotes', { items }))),
+    async ({ items, shop_id }) => result(unwrap(await apiPost('/quotes', { items, shop_id }))),
   );
 
   server.registerTool(
