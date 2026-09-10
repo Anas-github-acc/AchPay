@@ -9,3 +9,4 @@ data/adversarial-results.json
 *.tsbuildinfo
 
 supabase/.temp
+.vercel
