@@ -6,6 +6,7 @@ import type { SecurityReport } from '@storefront/shared';
 import { apiGet } from '../lib/api';
 import { LAYERS } from './security/layers';
 import { DemoButton } from './demo-button';
+import { RotatingText } from './hero-status-carousel';
 import { readCached, writeCached } from '../lib/cache';
 
 /**
@@ -34,7 +35,18 @@ export default function Landing() {
         <div className="wrap hero-grid">
           <div>
             {/* <p className="eyebrow">Agentic Commerce Hub</p> */}
-            <h1>Agent, Buy me a chai.</h1>
+            <h1>
+              <RotatingText
+                text={[
+                  'Agent, Buy me a chain.',
+                  'Searching for shop...',
+                  'Looked for catalog',
+                  'Making Payment...',
+                  'Done Payment.',
+                  'Here is your chai for 45Rs.',
+                ]}
+              />
+            </h1>
             <p className="hero-lede">
               Four words, one agent, and your card. AchPay is the layer in between — it decides what
               the agent may spend, refuses everything else, and writes down why.
