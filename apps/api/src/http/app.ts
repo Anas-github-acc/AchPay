@@ -47,6 +47,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     const path = request.url.split('?')[0] ?? '/';
     const publicPath =
       path === '/health' ||
+      path === '/mcp' ||
       path === '/demo/session' ||
       path === '/auth/session' ||
       path === '/products' ||
