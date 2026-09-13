@@ -104,6 +104,8 @@ export const config = {
   isTest,
   port,
   mcpHttpToken: mcpHttpToken(),
+  /** User identity used by authenticated MCP requests to reach protected API routes. */
+  mcpUserId: process.env.MCP_USER_ID?.trim() || process.env.SUPABASE_DEMO_USER_ID?.trim(),
   merchant,
   publicBaseUrl: publicBaseUrl(),
   /** Origin of the dashboard, where the mandate-authorisation page lives. */

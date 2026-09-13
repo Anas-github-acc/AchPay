@@ -47,7 +47,10 @@ async function request(
   try {
     const res = await fetch(url, {
       method,
-      headers: body === undefined ? {} : { 'content-type': 'application/json' },
+      headers: {
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...(process.env.MCP_HTTP_TOKEN ? { 'x-mcp-token': process.env.MCP_HTTP_TOKEN } : {}),
+      },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });

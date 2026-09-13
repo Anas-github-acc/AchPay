@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { config } from '../config.js';
 import { Catalog, getCatalog } from '../catalog/catalog.js';
@@ -62,10 +63,27 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
       path.startsWith('/receipts/') ||
       path === '/internal/reclaim';
     if (!publicPath) {
-      const userId = await requireUser(request, reply);
-      if (!userId) return;
-      if ((path === '/merchant/account' || path === '/shops' || path.startsWith('/shops/')) && !requireRole(request, reply, 'merchant')) return;
-      if ((path === '/ledger' || path.startsWith('/ledger/') || path === '/mandates' || path.startsWith('/mandates/')) && !requireRole(request, reply, 'client')) return;
+      const supplied = request.headers['x-mcp-token'];
+      const expected = config.mcpHttpToken;
+      const suppliedBytes = Buffer.from(typeof supplied === 'string' ? supplied : '');
+      const expectedBytes = expected === undefined ? Buffer.alloc(0) : Buffer.from(expected);
+      const isMcpIdentity =
+        expected !== undefined &&
+        config.mcpUserId !== undefined &&
+        suppliedBytes.length === expectedBytes.length &&
+        timingSafeEqual(suppliedBytes, expectedBytes);
+
+      if (isMcpIdentity) {
+        request.demoUserId = config.mcpUserId;
+        request.authRole = 'client';
+        request.authProvider = 'demo';
+        request.isDemo = true;
+      } else {
+        const userId = await requireUser(request, reply);
+        if (!userId) return;
+        if ((path === '/merchant/account' || path.startsWith('/shops/')) && !requireRole(request, reply, 'merchant')) return;
+        if ((path === '/ledger' || path.startsWith('/ledger/') || path === '/mandates' || path.startsWith('/mandates/')) && !requireRole(request, reply, 'client')) return;
+      }
     }
   });
 
