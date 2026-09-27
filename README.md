@@ -26,6 +26,12 @@
 
 ---
 
+![AchPay future work architecture](assets/future_work.png)
+
+## Currently Working On This
+
+The diagram shows the next stage of AchPay: connecting the AI agent, platform, secure AI payment layer, payment gateway, and merchant storefronts. Merchant `SKILLS.md` files will help agents recommend products, while user decisions are captured to improve future recommendations. The payment layer remains policy-controlled, auditable, and protected from prompt injection and untrusted merchant content.
+
 ## Overview
 
 Allowing your AI Agent to make payments on behalf of you is inherently risky. Traditional payment flows accept dynamic amounts from client code, leaving systems vulnerable to prompt injection, hallucinations, hallucinated prices, and runaway loops.
